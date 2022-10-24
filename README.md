@@ -38,7 +38,7 @@ Then perform a `go mod tidy` to download the package.
 ##### Level
 ```go
 // Level type
-type Level uint8
+type Level int
 ```
 Defines the type that will represent the different log levels
 
@@ -60,23 +60,31 @@ To view the default values of each field, go to the "[Default values](#default-v
 
 ##### SetLogLevel
 ```go
-func SetLogLevel(level string)
+func SetLogLevel(level Level)
 ```
 Sets the log level. The valid log levels are:
-- panic 
-- error 
-- warning 
-- info 
-- debug
-- verbose
+| int | string | Level |
+| --- | --- | --- |
+| 1 | panic | PanicLevel |
+| 2 | error | ErrorLevel |
+| 3 | warning | WarningLevel |
+| 4 | info | InfoLevel |
+| 5 | debug | DebugLevel |
+| 6 | verbose | VerboseLevel |
 
-The log levels above are in ascending order of verbosity. For example setting the log level to "info" would mean "panic", "error", warning", and "info" messages will get logged while "debug", and "verbose" will not. 
+The log levels above are in ascending order of verbosity. For example, setting the log level to InfoLevel would mean "panic", "error", warning", and "info" messages will get logged while "debug", and "verbose" will not. 
 
 ##### GetLogLevel
 ```go
 func GetLogLevel() Level
 ```
 Returns the current log level
+
+##### StringToLevel
+```go
+func StringToLevel(level string) Level
+```
+Returns the Level equivalent of a string. See SetLogLevel for valid levels.
 
 ##### String
 ```go

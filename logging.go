@@ -26,7 +26,7 @@ import (
 )
 
 // Level type
-type Level uint8
+type Level int
 
 /*
 Common use of different level:
@@ -40,18 +40,18 @@ Common use of different level:
 */
 
 const (
-	panicLevel Level = iota
-	errorLevel
-	warningLevel
-	infoLevel
-	debugLevel
-	verboseLevel
-	unknownLevel
+	PanicLevel   Level = 1
+	ErrorLevel   Level = 2
+	WarningLevel Level = 3
+	InfoLevel    Level = 4
+	DebugLevel   Level = 5
+	VerboseLevel Level = 6
+	maximumLevel Level = 7
 )
 
 const (
 	defaultLogFile         = "/var/log/cni-log.log"
-	defaultLogLevel        = infoLevel
+	defaultLogLevel        = InfoLevel
 	defaultTimestampFormat = time.RFC3339
 
 	logFileFailMsg     = "cni-log: failed to set log file '%s'\n"
@@ -61,12 +61,12 @@ const (
 )
 
 var levelMap = map[string]Level{
-	"panic":   panicLevel,
-	"error":   errorLevel,
-	"warning": warningLevel,
-	"info":    infoLevel,
-	"debug":   debugLevel,
-	"verbose": verboseLevel,
+	"panic":   PanicLevel,
+	"error":   ErrorLevel,
+	"warning": WarningLevel,
+	"info":    InfoLevel,
+	"debug":   DebugLevel,
+	"verbose": VerboseLevel,
 }
 
 var logger *lumberjack.Logger
@@ -133,11 +133,21 @@ func GetLogLevel() Level {
 }
 
 // SetLogLevel sets logging level
-func SetLogLevel(level string) {
-	l := convertLevelString(level)
-	if l < unknownLevel {
-		logLevel = l
+func SetLogLevel(level Level) {
+	if validateLogLevel(level) {
+		logLevel = level
+	} else {
+		fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
 	}
+}
+
+func StringToLevel(level string) Level {
+	if l, found := levelMap[strings.ToLower(level)]; found {
+		return l
+	}
+
+	fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
+	return -1
 }
 
 // SetLogStderr sets flag for logging stderr output
@@ -147,17 +157,17 @@ func SetLogStderr(enable bool) {
 
 func (l Level) String() string {
 	switch l {
-	case panicLevel:
+	case PanicLevel:
 		return "panic"
-	case verboseLevel:
+	case VerboseLevel:
 		return "verbose"
-	case warningLevel:
+	case WarningLevel:
 		return "warning"
-	case infoLevel:
+	case InfoLevel:
 		return "info"
-	case errorLevel:
+	case ErrorLevel:
 		return "error"
-	case debugLevel:
+	case DebugLevel:
 		return "debug"
 	default:
 		return "unknown"
@@ -166,45 +176,36 @@ func (l Level) String() string {
 
 // Panicf prints logging plus stack trace. This should be used only for unrecoverable error
 func Panicf(format string, a ...interface{}) {
-	printf(panicLevel, format, a...)
-	printf(panicLevel, "========= Stack trace output ========")
-	printf(panicLevel, "%+v", Errorf("CNI Panic"))
-	printf(panicLevel, "========= Stack trace output end ========")
+	printf(PanicLevel, format, a...)
+	printf(PanicLevel, "========= Stack trace output ========")
+	printf(PanicLevel, "%+v", Errorf("CNI Panic"))
+	printf(PanicLevel, "========= Stack trace output end ========")
 }
 
 // Errorf prints logging if logging level >= error
 func Errorf(format string, a ...interface{}) error {
-	printf(errorLevel, format, a...)
+	printf(ErrorLevel, format, a...)
 	return fmt.Errorf(format, a...)
 }
 
 // Warningf prints logging if logging level >= warning
 func Warningf(format string, a ...interface{}) {
-	printf(warningLevel, format, a...)
+	printf(WarningLevel, format, a...)
 }
 
 // Infof prints logging if logging level >= info
 func Infof(format string, a ...interface{}) {
-	printf(infoLevel, format, a...)
+	printf(InfoLevel, format, a...)
 }
 
 // Debugf prints logging if logging level >= debug
 func Debugf(format string, a ...interface{}) {
-	printf(debugLevel, format, a...)
+	printf(DebugLevel, format, a...)
 }
 
 // Verbosef prints logging if logging level >= verbose
 func Verbosef(format string, a ...interface{}) {
-	printf(verboseLevel, format, a...)
-}
-
-func convertLevelString(level string) Level {
-	if l, found := levelMap[strings.ToLower(level)]; found {
-		return l
-	}
-
-	fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
-	return unknownLevel
+	printf(VerboseLevel, format, a...)
 }
 
 func doWrite(writer io.Writer, level Level, format string, a ...interface{}) {
@@ -275,4 +276,8 @@ func resolvePath(path string) string {
 	}
 
 	return filepath.Clean(path)
+}
+
+func validateLogLevel(level Level) bool {
+	return level > 0 && level < maximumLevel
 }
