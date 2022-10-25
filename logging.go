@@ -112,6 +112,7 @@ func SetLogOptions(options *LogOptions) {
 			logger.Compress = *options.Compress
 		}
 	}
+
 	logWriter = logger
 }
 
@@ -172,6 +173,11 @@ func (l Level) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+// SetOutput set custom output WARNING subsequent call to SetLogFile or SetLogOptions invalidates this setting
+func SetOutput(out io.Writer) {
+	logWriter = out
 }
 
 // Panicf prints logging plus stack trace. This should be used only for unrecoverable error

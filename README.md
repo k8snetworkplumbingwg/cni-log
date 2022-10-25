@@ -110,6 +110,12 @@ func SetLogFile(filename string)
 ```
 Configures where logs will be written to. If an empty/invalid filepath (e.g. insufficient permissions), or a symbolic link is passed into the function, the default log filepath is used.
 
+##### SetOuput
+```go
+func SetOutput(out io.Writer)
+```
+Set custom output. Calling this function will discard any previously set LogOptions.
+
 #### Logging functions
 ```go
 // Errorf prints logging if logging level >= error

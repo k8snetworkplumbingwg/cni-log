@@ -386,6 +386,15 @@ var _ = Describe("CNI Logging Operations", func() {
 				Expect(out).To(ContainSubstring(verboseMsg))
 			})
 		})
+
+		When("custom io.Writer is set", func() {
+			It("should log message to custom out", func() {
+				var out bytes.Buffer
+				SetOutput(&out)
+				Infof(infoMsg)
+				Expect(out.String()).To(ContainSubstring(infoMsg))
+			})
+		})
 	})
 })
 
