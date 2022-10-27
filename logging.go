@@ -73,6 +73,21 @@ var logger *lumberjack.Logger
 var logWriter io.Writer
 var logLevel Level
 var logToStderr bool
+var prefixer Prefixer
+
+// Prefix creator interface. Implement this interface if you wish to to create a custom prefix.
+type Prefixer interface {
+	// Produces the prefix string. CNI-Log will call this function
+	// to request for the prefix when building the logging output and will pass in the appropriate
+	// log level of your log message.
+	CreatePrefix(Level) string
+}
+
+// Defines a default prefixer which will be used if a custom prefix is not provided
+type defaultPrefixer struct {
+	prefixFormat string
+	timeFormat   string
+}
 
 // LogOptions defines the configuration of the lumberjack logger
 type LogOptions struct {
@@ -89,6 +104,21 @@ func init() {
 
 	// Setting default LogFile
 	SetLogFile(defaultLogFile)
+
+	// Create the default prefixer
+	defaultPrefix := &defaultPrefixer{
+		prefixFormat: "%s [%s] ",
+		timeFormat:   defaultTimestampFormat,
+	}
+	SetPrefixer(defaultPrefix)
+}
+
+func (p *defaultPrefixer) CreatePrefix(loggingLevel Level) string {
+	return fmt.Sprintf(p.prefixFormat, time.Now().Format(p.timeFormat), loggingLevel)
+}
+
+func SetPrefixer(p Prefixer) {
+	prefixer = p
 }
 
 // Set the logging options (LogOptions)
@@ -215,10 +245,7 @@ func Verbosef(format string, a ...interface{}) {
 }
 
 func doWrite(writer io.Writer, level Level, format string, a ...interface{}) {
-	header := "%s [%s] "
-	t := time.Now()
-
-	fmt.Fprintf(writer, header, t.Format(defaultTimestampFormat), level)
+	fmt.Fprint(writer, prefixer.CreatePrefix(level))
 	fmt.Fprintf(writer, format, a...)
 	fmt.Fprintf(writer, "\n")
 }
