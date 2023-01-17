@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -22,6 +23,15 @@ const (
 	debugMsg   = "This is a DEBUG message"
 	verboseMsg = "This is a VERBOSE message"
 )
+
+type customPrefix struct {
+	prefixFormat string
+	currentFile  string
+}
+
+func (cp *customPrefix) CreatePrefix(loggingLevel Level) string {
+	return fmt.Sprintf(cp.prefixFormat, loggingLevel, GetLogLevel(), cp.currentFile)
+}
 
 func TestLogging(t *testing.T) {
 	RegisterFailHandler(Fail)
@@ -123,31 +133,66 @@ var _ = Describe("CNI Logging Operations", func() {
 		})
 	})
 
+	Context("Converting strings to Levels", func() {
+		When("a valid string is passed", func() {
+			It("returns the correct level value", func() {
+				Expect(StringToLevel("warning")).To(Equal(WarningLevel))
+				Expect(StringToLevel("ERROR")).To(Equal(ErrorLevel))
+			})
+		})
+
+		When("an invalid string is passed", func() {
+			It("returns -1", func() {
+				invalidLogLevel := "invalid"
+				expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
+				loggerOutput := captureStdErrStrLev(StringToLevel, invalidLogLevel)
+				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
+			})
+		})
+	})
+
 	Context("Setting the log level", func() {
 		When("a valid log level argument is passed in", func() {
 			It("sets the appropriate log level", func() {
-				SetLogLevel("debug")
-				Expect(logLevel).To(Equal(debugLevel))
-				SetLogLevel("INFO")
-				Expect(logLevel).To(Equal(infoLevel))
-				SetLogLevel("VeRbOsE")
-				Expect(logLevel).To(Equal(verboseLevel))
-				SetLogLevel("warning")
-				Expect(logLevel).To(Equal(warningLevel))
-				SetLogLevel("error")
-				Expect(logLevel).To(Equal(errorLevel))
-				SetLogLevel("panic")
-				Expect(logLevel).To(Equal(panicLevel))
+				//by string
+				SetLogLevel(StringToLevel("debug"))
+				Expect(logLevel).To(Equal(DebugLevel))
+				SetLogLevel(StringToLevel("INFO"))
+				Expect(logLevel).To(Equal(InfoLevel))
+				SetLogLevel(StringToLevel("VeRbOsE"))
+				Expect(logLevel).To(Equal(VerboseLevel))
+				SetLogLevel(StringToLevel("warning"))
+				Expect(logLevel).To(Equal(WarningLevel))
+				SetLogLevel(StringToLevel("error"))
+				Expect(logLevel).To(Equal(ErrorLevel))
+				SetLogLevel(StringToLevel("panic"))
+				Expect(logLevel).To(Equal(PanicLevel))
+				//by int
+				for i := 1; i <= 6; i++ {
+					l := Level(i)
+					SetLogLevel(l)
+					Expect(logLevel).To(Equal(l))
+				}
+				//by level
+				SetLogLevel(VerboseLevel)
+				Expect(logLevel).To(Equal(VerboseLevel))
+				SetLogLevel(WarningLevel)
+				Expect(logLevel).To(Equal(WarningLevel))
 			})
 		})
 
 		When("an invalid log level argument is passed in", func() {
-			invalidLogLevel := "invalid"
+			invalidLogLevel := Level(-1)
 			It("maintains the current log level and logs an error", func() {
-				SetLogLevel(invalidLogLevel)
-
 				expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
-				loggerOutput := captureStdErrStr(SetLogLevel, invalidLogLevel)
+				loggerOutput := captureStdErrLev(SetLogLevel, invalidLogLevel)
+
+				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
+				Expect(logLevel).To(Equal(defaultLogLevel))
+
+				invalidLogLevel = Level(10)
+				expectedLoggerOutput = fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
+				loggerOutput = captureStdErrLev(SetLogLevel, invalidLogLevel)
 
 				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
 				Expect(logLevel).To(Equal(defaultLogLevel))
@@ -244,7 +289,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("logfile is set to default and messages are logged", Ordered, func() {
 
 			BeforeEach(func() {
-				SetLogLevel("error")
+				SetLogLevel(StringToLevel("error"))
 			})
 
 			AfterAll(func() {
@@ -277,7 +322,7 @@ var _ = Describe("CNI Logging Operations", func() {
 
 			BeforeEach(func() {
 				SetLogFile(logFile)
-				SetLogLevel("error")
+				SetLogLevel(StringToLevel("error"))
 			})
 
 			It("should print appropriate log messages to log file including ERROR message", func() {
@@ -303,7 +348,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("log level is set to INFO and messages are logged", func() {
 			BeforeEach(func() {
 				SetLogFile(logFile)
-				SetLogLevel("info")
+				SetLogLevel(StringToLevel("info"))
 			})
 
 			It("should print appropriate log messages to log file including INFO message", func() {
@@ -329,7 +374,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("log level is set to VERBOSE and messages are logged", func() {
 			BeforeEach(func() {
 				SetLogFile(logFile)
-				SetLogLevel("verbose")
+				SetLogLevel(StringToLevel("verbose"))
 			})
 
 			It("should print appropriate log messages to log file including VERBOSE message", func() {
@@ -351,8 +396,99 @@ var _ = Describe("CNI Logging Operations", func() {
 				Expect(out).To(ContainSubstring(verboseMsg))
 			})
 		})
+
+		When("custom io.Writer is set", func() {
+			It("should log message to custom out", func() {
+				var out bytes.Buffer
+				SetOutput(&out)
+				Infof(infoMsg)
+				Expect(out.String()).To(ContainSubstring(infoMsg))
+			})
+		})
+	})
+
+	Context("Updating the logging prefix", Ordered, func() {
+
+		var pFormat, logFile, currentFile, expectedPrefix string
+		var prefix *customPrefix
+
+		BeforeEach(func() {
+			logFile = "test.log"
+			SetLogFile(logFile)
+			SetLogLevel(VerboseLevel)
+		})
+
+		AfterEach(func() {
+			// Clear contents of file
+			data := []byte("")
+			err := ioutil.WriteFile(logFile, data, 0)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AfterAll(func() {
+			// Delete test log file after all tests have run
+			err := os.Remove(logFile)
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		When("a custom prefix is not provided", func() {
+
+			BeforeEach(func() {
+				expectedPrefix = fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+			})
+
+			It("uses the default prefix when logging to standard output", func() {
+				SetLogStderr(true)
+				out := captureStdErrLogging(validateLogFilePrefix, logFile, expectedPrefix)
+				Expect(out).To(ContainSubstring(expectedPrefix))
+			})
+
+			It("uses the default prefix when logging to the log file", func() {
+				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
+			})
+		})
+
+		When("a custom prefix is provided", func() {
+
+			BeforeEach(func() {
+				pFormat = "[%s/%s] - %s: "
+				currentFile = "logging_test.go"
+				prefix = &customPrefix{
+					prefixFormat: pFormat,
+					currentFile:  currentFile,
+				}
+				SetPrefixer(prefix)
+				expectedPrefix = "[info/verbose] - logging_test.go: "
+			})
+
+			It("is reflected when logging to standard output", func() {
+				SetLogStderr(true)
+				out := captureStdErrLogging(validateLogFilePrefix, logFile, expectedPrefix)
+				Expect(strings.HasPrefix(out, expectedPrefix)).To(BeTrue())
+			})
+
+			It("is reflected when logging to a file", func() {
+				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
+			})
+		})
 	})
 })
+
+// Checks if the logging prints out the custom prefix
+func validateLogFilePrefix(filename string, prefix string) bool {
+
+	// Populate the log file
+	Infof(infoMsg)
+
+	// Read in contents of file
+	contents, err := ioutil.ReadFile(filename)
+	if err != nil {
+		panic(err)
+	}
+	logContents := string(contents)
+	logLines := strings.Split(logContents, "\n")
+	return strings.HasPrefix(logLines[len(logLines)-2], prefix)
+}
 
 // Checks if the correct log messages are in the log file depending on the log level set
 func validateLogFile(logLevel string, filename string) bool {
@@ -425,6 +561,18 @@ func captureStdErrLogging(f func(string, string) bool, p1 string, p2 string) str
 }
 
 func captureStdErrStr(f func(string), p string) string {
+	pipeWriter, pipeReader, origWriter := openPipes()
+	f(p)
+	return closePipes(pipeWriter, pipeReader, origWriter)
+}
+
+func captureStdErrLev(f func(Level), p Level) string {
+	pipeWriter, pipeReader, origWriter := openPipes()
+	f(p)
+	return closePipes(pipeWriter, pipeReader, origWriter)
+}
+
+func captureStdErrStrLev(f func(string) Level, p string) string {
 	pipeWriter, pipeReader, origWriter := openPipes()
 	f(p)
 	return closePipes(pipeWriter, pipeReader, origWriter)
