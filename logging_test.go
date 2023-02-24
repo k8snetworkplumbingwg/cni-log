@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -207,7 +206,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		AfterEach(func() {
 			// Clear contents of file
 			data := []byte("")
-			err := ioutil.WriteFile(logFile, data, 0)
+			err := os.WriteFile(logFile, data, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -276,7 +275,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		AfterEach(func() {
 			// Clear contents of file
 			data := []byte("")
-			err := ioutil.WriteFile(logFile, data, 0)
+			err := os.WriteFile(logFile, data, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -421,7 +420,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		AfterEach(func() {
 			// Clear contents of file
 			data := []byte("")
-			err := ioutil.WriteFile(logFile, data, 0)
+			err := os.WriteFile(logFile, data, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -446,6 +445,25 @@ var _ = Describe("CNI Logging Operations", func() {
 			It("uses the default prefix when logging to the log file", func() {
 				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
 			})
+		})
+
+		When("prefix is set back to default", func() {
+
+			BeforeEach(func() {
+				SetDefaultPrefixer()
+				expectedPrefix = fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+			})
+
+			It("sets the default prefix when logging to standard output", func() {
+				SetLogStderr(true)
+				out := captureStdErrLogging(validateLogFilePrefix, logFile, expectedPrefix)
+				Expect(out).To(ContainSubstring(expectedPrefix))
+			})
+
+			It("sets the default prefix when logging to the log file", func() {
+				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
+			})
+
 		})
 
 		When("a custom prefix is provided", func() {
@@ -481,7 +499,7 @@ func validateLogFilePrefix(filename string, prefix string) bool {
 	Infof(infoMsg)
 
 	// Read in contents of file
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
@@ -505,7 +523,7 @@ func validateLogFile(logLevel string, filename string) bool {
 	Verbosef(verboseMsg)
 
 	// Read in the log file
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
