@@ -106,11 +106,7 @@ func init() {
 	SetLogFile(defaultLogFile)
 
 	// Create the default prefixer
-	defaultPrefix := &defaultPrefixer{
-		prefixFormat: "%s [%s] ",
-		timeFormat:   defaultTimestampFormat,
-	}
-	SetPrefixer(defaultPrefix)
+	SetDefaultPrefixer()
 }
 
 func (p *defaultPrefixer) CreatePrefix(loggingLevel Level) string {
@@ -119,6 +115,14 @@ func (p *defaultPrefixer) CreatePrefix(loggingLevel Level) string {
 
 func SetPrefixer(p Prefixer) {
 	prefixer = p
+}
+
+func SetDefaultPrefixer() {
+	defaultPrefix := &defaultPrefixer{
+		prefixFormat: "%s [%s] ",
+		timeFormat:   defaultTimestampFormat,
+	}
+	SetPrefixer(defaultPrefix)
 }
 
 // Set the logging options (LogOptions)
