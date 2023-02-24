@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 	"testing"
@@ -207,7 +206,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		AfterEach(func() {
 			// Clear contents of file
 			data := []byte("")
-			err := ioutil.WriteFile(logFile, data, 0)
+			err := os.WriteFile(logFile, data, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -276,7 +275,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		AfterEach(func() {
 			// Clear contents of file
 			data := []byte("")
-			err := ioutil.WriteFile(logFile, data, 0)
+			err := os.WriteFile(logFile, data, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -421,7 +420,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		AfterEach(func() {
 			// Clear contents of file
 			data := []byte("")
-			err := ioutil.WriteFile(logFile, data, 0)
+			err := os.WriteFile(logFile, data, 0)
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -481,7 +480,7 @@ func validateLogFilePrefix(filename string, prefix string) bool {
 	Infof(infoMsg)
 
 	// Read in contents of file
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
@@ -505,7 +504,7 @@ func validateLogFile(logLevel string, filename string) bool {
 	Verbosef(verboseMsg)
 
 	// Read in the log file
-	contents, err := ioutil.ReadFile(filename)
+	contents, err := os.ReadFile(filename)
 	if err != nil {
 		panic(err)
 	}
