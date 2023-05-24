@@ -50,10 +50,10 @@ const (
 )
 
 const (
-	defaultLogFile         = "/var/log/cni-log.log"
 	defaultLogLevel        = InfoLevel
 	defaultTimestampFormat = time.RFC3339
 
+	logFileReqFailMsg  = "cni-log: filename is required\n"
 	logFileFailMsg     = "cni-log: failed to set log file '%s'\n"
 	setLevelFailMsg    = "cni-log: cannot set logging level to '%s'\n"
 	symlinkEvalFailMsg = "cni-log: unable to evaluate symbolic links on path '%v'\n"
@@ -101,9 +101,6 @@ func init() {
 	logToStderr = true
 	logLevel = defaultLogLevel
 	logger = &lumberjack.Logger{}
-
-	// Setting default LogFile
-	SetLogFile(defaultLogFile)
 
 	// Create the default prefixer
 	SetDefaultPrefixer()
@@ -153,7 +150,13 @@ func SetLogOptions(options *LogOptions) {
 // SetLogFile sets logging file
 func SetLogFile(filename string) {
 	fp := resolvePath(filename)
-	if fp == "" || !isLogFileWritable(fp) {
+
+	if fp == "" {
+		fmt.Fprint(os.Stderr, logFileReqFailMsg)
+		return
+	}
+
+	if !isLogFileWritable(fp) {
 		fmt.Fprintf(os.Stderr, logFileFailMsg, filename)
 		return
 	}
@@ -255,6 +258,11 @@ func doWrite(writer io.Writer, level Level, format string, a ...interface{}) {
 }
 
 func printf(level Level, format string, a ...interface{}) {
+	if logger.Filename == "" {
+		fmt.Fprint(os.Stderr, logFileReqFailMsg)
+		return
+	}
+
 	if level > logLevel {
 		return
 	}

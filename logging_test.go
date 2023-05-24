@@ -15,12 +15,13 @@ import (
 )
 
 const (
-	panicMsg   = "This is a PANIC message"
-	errorMsg   = "This is an ERROR message"
-	warningMsg = "This is a WARNING message"
-	infoMsg    = "This is an INFO message"
-	debugMsg   = "This is a DEBUG message"
-	verboseMsg = "This is a VERBOSE message"
+	panicMsg    = "This is a PANIC message"
+	errorMsg    = "This is an ERROR message"
+	warningMsg  = "This is a WARNING message"
+	infoMsg     = "This is an INFO message"
+	debugMsg    = "This is a DEBUG message"
+	verboseMsg  = "This is a VERBOSE message"
+	testLogFile = "/tmp/cni-log-test.log"
 )
 
 type customPrefix struct {
@@ -46,27 +47,13 @@ var _ = Describe("CNI Logging Operations", func() {
 
 	AfterEach(func() {
 		logger = &lumberjack.Logger{}
-
-		// Setting default LogFile
-		SetLogFile(defaultLogFile)
 	})
 
 	Context("Setting the log file name", func() {
-		When("no logfile is provided", func() {
-			It("uses the default logfile", func() {
-				Expect(logger.Filename).To(Equal(defaultLogFile))
-				Expect(logWriter).To(Equal(logger))
-			})
-		})
-
 		When("the log file name is empty", func() {
-			It("does nothing, logfile is kept as default", func() {
-				expectedLoggerOutput := fmt.Sprint(emptyStringFailMsg, "")
-				loggerOutput := captureStdErrStr(SetLogFile, "")
-
-				Expect(logger.Filename).To(Equal(defaultLogFile))
-				Expect(logWriter).To(Equal(logger))
-				Expect(loggerOutput).To(ContainSubstring(expectedLoggerOutput))
+			It("an error to standard output is thrown", func() {
+				err := captureStdErrStr(SetLogFile, "")
+				Expect(err).To(ContainSubstring(logFileReqFailMsg))
 			})
 		})
 
@@ -89,15 +76,12 @@ var _ = Describe("CNI Logging Operations", func() {
 
 		When("the log file name is invalid", func() {
 			filename := "/proc/foobar.log"
-			It("ignores setting the file, logger object is default and a warning to standard output is thrown", func() {
+			It("an error to standard output is thrown", func() {
 
 				// Capture standard error output
 				expectedLoggerOutput := fmt.Sprintf(logFileFailMsg, filename)
 				loggerOutput := captureStdErrStr(SetLogFile, filename)
 
-				Expect(logWriter).To(Equal(logger))
-				Expect(filename).ToNot(BeAnExistingFile())
-				Expect(logger.Filename).To(Equal(defaultLogFile))
 				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
 			})
 		})
@@ -105,7 +89,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("the log file is set to a symbolic link", func() {
 			file := "symlink"
 			symlink := "symtarget.txt"
-			It("should not set logfile and keep default", func() {
+			It("an error to standard output is thrown", func() {
 				err := os.MkdirAll(file, 0755)
 				if err != nil {
 					Expect(err).ToNot(HaveOccurred())
@@ -119,8 +103,6 @@ var _ = Describe("CNI Logging Operations", func() {
 				expectedLoggerOutput := fmt.Sprintf(symlinkEvalFailMsg, symlink)
 				loggerOutput := captureStdErrStr(SetLogFile, symlink)
 
-				Expect(logWriter).To(Equal(logger))
-				Expect(logger.Filename).To(Equal(defaultLogFile))
 				Expect(loggerOutput).To(ContainSubstring(expectedLoggerOutput))
 			})
 			AfterEach(func() {
@@ -285,7 +267,40 @@ var _ = Describe("CNI Logging Operations", func() {
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		When("logfile is set to default and messages are logged", Ordered, func() {
+		When("logfile is set and messages are logged", Ordered, func() {
+
+			BeforeEach(func() {
+				SetLogFile(testLogFile)
+				SetLogLevel(StringToLevel("error"))
+			})
+
+			AfterAll(func() {
+				// Delete test log file after all tests have run
+				err := os.Remove(testLogFile)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
+			It("should print appropriate log messages to log file including ERROR message", func() {
+				Expect(validateLogFile("error", testLogFile)).To(BeTrue())
+			})
+
+			It("should not log to standard output when disabled", func() {
+				Expect(captureStdErrLogging(validateLogFile, "error", testLogFile)).To(BeEmpty())
+			})
+
+			It("should also log to standard output when enabled", func() {
+				SetLogStderr(true)
+				out := captureStdErrLogging(validateLogFile, "error", testLogFile)
+
+				Expect(out).To(ContainSubstring(panicMsg))
+				Expect(out).To(ContainSubstring(errorMsg))
+				Expect(out).ToNot(ContainSubstring(infoMsg))
+				Expect(out).ToNot(ContainSubstring(debugMsg))
+				Expect(out).ToNot(ContainSubstring(verboseMsg))
+			})
+		})
+
+		When("logfile is not set and an error to standard output is thrown", Ordered, func() {
 
 			BeforeEach(func() {
 				SetLogLevel(StringToLevel("error"))
@@ -293,27 +308,12 @@ var _ = Describe("CNI Logging Operations", func() {
 
 			AfterAll(func() {
 				// Delete test log file after all tests have run
-				err := os.Remove(defaultLogFile)
+				err := os.Remove(logFile)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
-			It("should print appropriate log messages to log file including ERROR message", func() {
-				Expect(validateLogFile("error", defaultLogFile)).To(BeTrue())
-			})
-
-			It("should not log to standard output when disabled", func() {
-				Expect(captureStdErrLogging(validateLogFile, "error", defaultLogFile)).To(BeEmpty())
-			})
-
-			It("should also log to standard output when enabled", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFile, "error", defaultLogFile)
-
-				Expect(out).To(ContainSubstring(panicMsg))
-				Expect(out).To(ContainSubstring(errorMsg))
-				Expect(out).ToNot(ContainSubstring(infoMsg))
-				Expect(out).ToNot(ContainSubstring(debugMsg))
-				Expect(out).ToNot(ContainSubstring(verboseMsg))
+			It("should not log messages", func() {
+				Expect(validateLogFile("error", logFile)).To(BeFalse())
 			})
 		})
 
@@ -399,6 +399,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("custom io.Writer is set", func() {
 			It("should log message to custom out", func() {
 				var out bytes.Buffer
+				SetLogFile(logFile)
 				SetOutput(&out)
 				Infof(infoMsg)
 				Expect(out.String()).To(ContainSubstring(infoMsg))
