@@ -302,18 +302,23 @@ var _ = Describe("CNI Logging Operations", func() {
 
 		When("logfile is not set and an error to standard output is thrown", Ordered, func() {
 
+			BeforeAll(func() {
+				_, err := os.Create(testLogFile)
+				Expect(err).ToNot(HaveOccurred())
+			})
+
 			BeforeEach(func() {
 				SetLogLevel(StringToLevel("error"))
 			})
 
 			AfterAll(func() {
 				// Delete test log file after all tests have run
-				err := os.Remove(logFile)
+				err := os.Remove(testLogFile)
 				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("should not log messages", func() {
-				Expect(validateLogFile("error", logFile)).To(BeFalse())
+				Expect(validateLogFile("error", testLogFile)).To(BeFalse())
 			})
 		})
 
@@ -399,7 +404,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("custom io.Writer is set", func() {
 			It("should log message to custom out", func() {
 				var out bytes.Buffer
-				SetLogFile(logFile)
+				SetLogFile(testLogFile)
 				SetOutput(&out)
 				Infof(infoMsg)
 				Expect(out.String()).To(ContainSubstring(infoMsg))
