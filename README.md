@@ -43,6 +43,14 @@ import (
 
 Then perform a `go mod tidy` to download the package.
 
+Please ensure that the log file is properly specified; otherwise, no information will be printed to the console. In the event that the log file is not configured correctly, relevant error messages will be printed to the console.
+
+```go
+    ...
+    logging.SetLogFile("samplelog.log")
+    ...
+```
+
 ### Customizing the logging prefix/header
 
 CNI-log allows users to modify the logging prefix/header. The default prefix is in the following format:
