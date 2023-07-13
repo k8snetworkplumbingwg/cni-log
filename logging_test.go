@@ -53,7 +53,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("the log file name is empty", func() {
 			It("an error to standard output is thrown", func() {
 				err := captureStdErrStr(SetLogFile, "")
-				Expect(err).To(ContainSubstring(emptyStringFailMsg))
+				Expect(err).To(ContainSubstring(logFileReqFailMsg))
 			})
 		})
 

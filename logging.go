@@ -53,7 +53,7 @@ const (
 	defaultLogLevel        = InfoLevel
 	defaultTimestampFormat = time.RFC3339
 
-	logFileReqFailMsg  = "cni-log: filename is required\n"
+	logFileReqFailMsg  = "cni-log: filename is required when logging to stderr is off - will not log anything\n"
 	logFileFailMsg     = "cni-log: failed to set log file '%s'\n"
 	setLevelFailMsg    = "cni-log: cannot set logging level to '%s'\n"
 	symlinkEvalFailMsg = "cni-log: unable to evaluate symbolic links on path '%v'"
@@ -152,11 +152,24 @@ func SetLogOptions(options *LogOptions) {
 		}
 	}
 
-	logWriter = logger
+	// Update the logWriter if necessary.
+	if isFileLoggingEnabled() {
+		logWriter = logger
+	}
 }
 
 // SetLogFile sets logging file
 func SetLogFile(filename string) {
+	// Allow logging to stderr only. Print an error a single time when this is set to the empty string but stderr
+	// logging is off.
+	if filename == "" {
+		if !logToStderr {
+			fmt.Fprint(os.Stderr, logFileReqFailMsg)
+		}
+		disableFileLogging()
+		return
+	}
+
 	fp, err := resolvePath(filename)
 	if err != nil {
 		fmt.Fprint(os.Stderr, err)
@@ -170,6 +183,17 @@ func SetLogFile(filename string) {
 
 	logger.Filename = filename
 	logWriter = logger
+}
+
+// disableFileLogging disables file logging.
+func disableFileLogging() {
+	logger.Filename = ""
+	logWriter = nil
+}
+
+// isFileLoggingEnabled returns true if file logging is enabled.
+func isFileLoggingEnabled() bool {
+	return logWriter != nil
 }
 
 // GetLogLevel gets current logging level
@@ -197,6 +221,9 @@ func StringToLevel(level string) Level {
 
 // SetLogStderr sets flag for logging stderr output
 func SetLogStderr(enable bool) {
+	if !enable && !isFileLoggingEnabled() {
+		fmt.Fprint(os.Stderr, logFileReqFailMsg)
+	}
 	logToStderr = enable
 }
 
@@ -265,8 +292,11 @@ func doWritef(writer io.Writer, level Level, format string, a ...interface{}) {
 }
 
 func printf(level Level, format string, a ...interface{}) {
-	if logger.Filename == "" {
-		fmt.Fprint(os.Stderr, logFileReqFailMsg)
+	if level > logLevel {
+		return
+	}
+
+	if !isFileLoggingEnabled() && !logToStderr {
 		return
 	}
 
@@ -278,7 +308,7 @@ func printf(level Level, format string, a ...interface{}) {
 		doWritef(os.Stderr, level, format, a...)
 	}
 
-	if logWriter != nil {
+	if isFileLoggingEnabled() {
 		doWritef(logWriter, level, format, a...)
 	}
 }
