@@ -56,7 +56,7 @@ const (
 	logFileReqFailMsg  = "cni-log: filename is required\n"
 	logFileFailMsg     = "cni-log: failed to set log file '%s'\n"
 	setLevelFailMsg    = "cni-log: cannot set logging level to '%s'\n"
-	symlinkEvalFailMsg = "cni-log: unable to evaluate symbolic links on path '%v'\n"
+	symlinkEvalFailMsg = "cni-log: unable to evaluate symbolic links on path '%v'"
 	emptyStringFailMsg = "cni-log: unable to resolve empty string"
 )
 
@@ -157,10 +157,9 @@ func SetLogOptions(options *LogOptions) {
 
 // SetLogFile sets logging file
 func SetLogFile(filename string) {
-	fp := resolvePath(filename)
-
-	if fp == "" {
-		fmt.Fprint(os.Stderr, logFileReqFailMsg)
+	fp, err := resolvePath(filename)
+	if err != nil {
+		fmt.Fprint(os.Stderr, err)
 		return
 	}
 
@@ -321,18 +320,17 @@ func isSymLink(path string) bool {
 	return false
 }
 
-func resolvePath(path string) string {
+// resolvePath will try to resolve the provided path. If path is empty or is a symlink, return an error.
+func resolvePath(path string) (string, error) {
 	if path == "" {
-		fmt.Fprintln(os.Stderr, emptyStringFailMsg)
-		return ""
+		return "", fmt.Errorf(emptyStringFailMsg)
 	}
 
 	if isSymLink(path) {
-		fmt.Fprintf(os.Stderr, symlinkEvalFailMsg, path)
-		return ""
+		return "", fmt.Errorf(symlinkEvalFailMsg, path)
 	}
 
-	return filepath.Clean(path)
+	return filepath.Clean(path), nil
 }
 
 func validateLogLevel(level Level) bool {
