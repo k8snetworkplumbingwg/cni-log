@@ -99,9 +99,17 @@ type LogOptions struct {
 }
 
 func init() {
-	logToStderr = true
-	logLevel = defaultLogLevel
+	initLogger()
+}
+
+func initLogger() {
 	logger = &lumberjack.Logger{}
+
+	// Set default options.
+	SetLogOptions(nil)
+	SetLogStderr(true)
+	SetLogFile("")
+	SetLogLevel(defaultLogLevel)
 
 	// Create the default prefixer
 	SetDefaultPrefixer()
