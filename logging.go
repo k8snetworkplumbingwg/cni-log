@@ -284,6 +284,8 @@ func printf(level Level, format string, a ...interface{}) {
 	}
 }
 
+// isLogFileWritable checks if the path can be written to. If the file does not exist yet, the entire path including
+// the file will be created.
 func isLogFileWritable(filename string) bool {
 	logFileDirs := filepath.Dir(filename)
 
@@ -297,9 +299,11 @@ func isLogFileWritable(filename string) bool {
 		}
 	}
 
-	if _, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644); err != nil {
+	f, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
 		return false
 	}
+	f.Close()
 
 	return true
 }
