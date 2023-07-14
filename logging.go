@@ -53,7 +53,6 @@ const (
 	defaultLogLevel        = InfoLevel
 	defaultTimestampFormat = time.RFC3339
 
-	logFileExistsMsg   = "cni-log: log file '%s' exists - logger appends if below max size, else timestamps and creates new file.\n"
 	logFileReqFailMsg  = "cni-log: filename is required\n"
 	logFileFailMsg     = "cni-log: failed to set log file '%s'\n"
 	setLevelFailMsg    = "cni-log: cannot set logging level to '%s'\n"
@@ -168,11 +167,6 @@ func SetLogFile(filename string) {
 	if !isLogFileWritable(fp) {
 		fmt.Fprintf(os.Stderr, logFileFailMsg, filename)
 		return
-	}
-
-	// logging file already exists
-	if _, err := os.Stat(fp); err == nil {
-		fmt.Fprintf(os.Stderr, logFileExistsMsg, filename)
 	}
 
 	logger.Filename = filename

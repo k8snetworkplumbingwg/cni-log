@@ -112,21 +112,6 @@ var _ = Describe("CNI Logging Operations", func() {
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
-
-		When("the log file already exists", func() {
-			It("a error is outputted to standard error", func() {
-				_, err := os.Create(testLogFile)
-				Expect(err).ToNot(HaveOccurred())
-
-				expectedLoggerOutput := fmt.Sprintf(logFileExistsMsg, testLogFile)
-				loggerOutput := captureStdErrStr(SetLogFile, testLogFile)
-
-				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
-
-				err = os.Remove(testLogFile)
-				Expect(err).ToNot(HaveOccurred())
-			})
-		})
 	})
 
 	Context("Converting strings to Levels", func() {
