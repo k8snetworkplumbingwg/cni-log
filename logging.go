@@ -46,7 +46,7 @@ const (
 	InfoLevel    Level = 4
 	DebugLevel   Level = 5
 	VerboseLevel Level = 6
-	maximumLevel Level = 7
+	maximumLevel Level = VerboseLevel
 )
 
 const (
@@ -330,5 +330,5 @@ func resolvePath(path string) string {
 }
 
 func validateLogLevel(level Level) bool {
-	return level > 0 && level < maximumLevel
+	return level > 0 && level <= maximumLevel
 }
