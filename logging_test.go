@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -15,13 +16,12 @@ import (
 )
 
 const (
-	panicMsg    = "This is a PANIC message"
-	errorMsg    = "This is an ERROR message"
-	warningMsg  = "This is a WARNING message"
-	infoMsg     = "This is an INFO message"
-	debugMsg    = "This is a DEBUG message"
-	verboseMsg  = "This is a VERBOSE message"
-	testLogFile = "/tmp/cni-log-test.log"
+	panicMsg   = "This is a PANIC message"
+	errorMsg   = "This is an ERROR message"
+	warningMsg = "This is a WARNING message"
+	infoMsg    = "This is an INFO message"
+	debugMsg   = "This is a DEBUG message"
+	verboseMsg = "This is a VERBOSE message"
 )
 
 type customPrefix struct {
@@ -39,57 +39,136 @@ func TestLogging(t *testing.T) {
 }
 
 var _ = Describe("CNI Logging Operations", func() {
+	BeforeEach(func() {
+		initLogger()
+	})
+
+	var logFile string
 
 	BeforeEach(func() {
-		logLevel = defaultLogLevel
-		logToStderr = false
+		logFile = path.Join(os.TempDir(), "test.log")
 	})
 
 	AfterEach(func() {
-		logger = &lumberjack.Logger{}
+		Expect(os.RemoveAll(logFile)).To(Succeed())
+	})
+
+	Context("Default settings", func() {
+		When("the defaults are used", func() {
+			It("logs to stderr", func() {
+				Expect(logToStderr).To(BeTrue())
+			})
+
+			It("does not log to file", func() {
+				Expect(isFileLoggingEnabled()).To(BeFalse())
+			})
+		})
+	})
+
+	Context("Setting error logging", func() {
+		Context("File logging is disabled", func() {
+			When("error logging is enabled first and file logging is disabled later", func() {
+				It("does not report an error", func() {
+					errStr := captureStdErr(SetLogStderr, true)
+					Expect(errStr).To(BeEmpty())
+					errStr = captureStdErr(SetLogFile, "")
+					Expect(errStr).To(BeEmpty())
+				})
+			})
+
+			When("error logging is disabled while file logging is disabled", func() {
+				It("does report an error", func() {
+					errStr := captureStdErr(SetLogFile, "")
+					Expect(errStr).To(BeEmpty())
+					errStr = captureStdErr(SetLogStderr, false)
+					Expect(errStr).To(ContainSubstring(logFileReqFailMsg))
+				})
+			})
+		})
+
+		Context("File logging is enabled", func() {
+			When("error logging is enabled first and file logging is enabled later", func() {
+				It("does not report an error", func() {
+					errStr := captureStdErr(SetLogStderr, true)
+					Expect(errStr).To(BeEmpty())
+					errStr = captureStdErr(SetLogFile, logFile)
+					Expect(errStr).To(BeEmpty())
+				})
+			})
+
+			When("error logging is disabled while file logging is enabled", func() {
+				It("does not report an error", func() {
+					errStr := captureStdErr(SetLogFile, logFile)
+					Expect(errStr).To(BeEmpty())
+					errStr = captureStdErr(SetLogStderr, false)
+					Expect(errStr).To(BeEmpty())
+				})
+			})
+		})
 	})
 
 	Context("Setting the log file name", func() {
 		When("the log file name is empty", func() {
-			It("an error to standard output is thrown", func() {
-				err := captureStdErrStr(SetLogFile, "")
-				Expect(err).To(ContainSubstring(logFileReqFailMsg))
+			It("an error to standard output is thrown when logging to stderr is off", func() {
+				errStr := captureStdErr(SetLogStderr, false)
+				Expect(errStr).To(ContainSubstring(logFileReqFailMsg))
+				errStr = captureStdErr(SetLogFile, "")
+				Expect(errStr).To(ContainSubstring(logFileReqFailMsg))
+			})
+
+			It("no error to standard output is thrown when logging to stderr is on", func() {
+				errStr := captureStdErr(SetLogStderr, true)
+				Expect(errStr).To(BeEmpty())
+				errStr = captureStdErr(SetLogFile, "")
+				Expect(errStr).To(BeEmpty())
 			})
 		})
 
 		When("the log file name is valid", func() {
-			filename := "/tmp/foobar.log"
-			BeforeEach(func() {
-				SetLogFile(filename)
+			It("prepares the logger's writer and creates the log file", func() {
+				SetLogFile(logFile)
+				Expect(logWriter).To(Equal(logger))
+				Expect(logFile).To(BeAnExistingFile())
 			})
-			AfterEach(func() {
-				// Clear log file after each test run
-				err := os.Remove(filename)
-				Expect(err).ToNot(HaveOccurred())
+		})
+
+		When("the log file's parent directory does not exist", func() {
+			var logFileDir string
+
+			BeforeEach(func() {
+				logFileDir = path.Join(os.TempDir(), "nested/nested")
+				logFile = path.Join(logFileDir, "test.log")
 			})
 
-			It("prepares the logger's writer and creates the log file", func() {
+			AfterEach(func() {
+				Expect(os.RemoveAll(logFileDir)).To(Succeed())
+			})
+
+			It("should be created", func() {
+				SetLogFile(logFile)
 				Expect(logWriter).To(Equal(logger))
-				Expect(filename).To(BeAnExistingFile())
+				Expect(logFile).To(BeAnExistingFile())
 			})
 		})
 
 		When("the log file name is invalid", func() {
-			filename := "/proc/foobar.log"
 			It("an error to standard output is thrown", func() {
-
-				// Capture standard error output
+				filename := "/proc/foobar.log"
 				expectedLoggerOutput := fmt.Sprintf(logFileFailMsg, filename)
-				loggerOutput := captureStdErrStr(SetLogFile, filename)
-
+				loggerOutput := captureStdErr(SetLogFile, filename)
 				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
 			})
 		})
 
 		When("the log file is set to a symbolic link", func() {
-			file := "symlink"
-			symlink := "symtarget.txt"
-			It("an error to standard output is thrown", func() {
+			var file string
+			var symlink string
+
+			BeforeEach(func() {
+				tempDir := os.TempDir()
+				file = path.Join(tempDir, "symlink")
+				symlink = path.Join(tempDir, "symtarget.txt")
+
 				err := os.MkdirAll(file, 0755)
 				if err != nil {
 					Expect(err).ToNot(HaveOccurred())
@@ -99,99 +178,24 @@ var _ = Describe("CNI Logging Operations", func() {
 				if err != nil {
 					Expect(err).ToNot(HaveOccurred())
 				}
-
-				expectedLoggerOutput := fmt.Sprintf(symlinkEvalFailMsg, symlink)
-				loggerOutput := captureStdErrStr(SetLogFile, symlink)
-
-				Expect(loggerOutput).To(ContainSubstring(expectedLoggerOutput))
 			})
+
 			AfterEach(func() {
 				err := os.Remove(file)
 				Expect(err).ToNot(HaveOccurred())
 				err = os.Remove(symlink)
 				Expect(err).ToNot(HaveOccurred())
 			})
-		})
-	})
 
-	Context("Converting strings to Levels", func() {
-		When("a valid string is passed", func() {
-			It("returns the correct level value", func() {
-				Expect(StringToLevel("warning")).To(Equal(WarningLevel))
-				Expect(StringToLevel("ERROR")).To(Equal(ErrorLevel))
-			})
-		})
-
-		When("an invalid string is passed", func() {
-			It("returns -1", func() {
-				invalidLogLevel := "invalid"
-				expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
-				loggerOutput := captureStdErrStrLev(StringToLevel, invalidLogLevel)
-				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
-			})
-		})
-	})
-
-	Context("Setting the log level", func() {
-		When("a valid log level argument is passed in", func() {
-			It("sets the appropriate log level", func() {
-				// by string
-				SetLogLevel(StringToLevel("debug"))
-				Expect(logLevel).To(Equal(DebugLevel))
-				SetLogLevel(StringToLevel("INFO"))
-				Expect(logLevel).To(Equal(InfoLevel))
-				SetLogLevel(StringToLevel("VeRbOsE"))
-				Expect(logLevel).To(Equal(VerboseLevel))
-				SetLogLevel(StringToLevel("warning"))
-				Expect(logLevel).To(Equal(WarningLevel))
-				SetLogLevel(StringToLevel("error"))
-				Expect(logLevel).To(Equal(ErrorLevel))
-				SetLogLevel(StringToLevel("panic"))
-				Expect(logLevel).To(Equal(PanicLevel))
-				// by int
-				for i := 1; i <= 6; i++ {
-					l := Level(i)
-					SetLogLevel(l)
-					Expect(logLevel).To(Equal(l))
-				}
-				// by level
-				SetLogLevel(VerboseLevel)
-				Expect(logLevel).To(Equal(VerboseLevel))
-				SetLogLevel(WarningLevel)
-				Expect(logLevel).To(Equal(WarningLevel))
-			})
-		})
-
-		When("an invalid log level argument is passed in", func() {
-			invalidLogLevel := Level(-1)
-			It("maintains the current log level and logs an error", func() {
-				expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
-				loggerOutput := captureStdErrLev(SetLogLevel, invalidLogLevel)
-
-				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
-				Expect(logLevel).To(Equal(defaultLogLevel))
-
-				invalidLogLevel = Level(10)
-				expectedLoggerOutput = fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
-				loggerOutput = captureStdErrLev(SetLogLevel, invalidLogLevel)
-
-				Expect(loggerOutput).To(Equal(expectedLoggerOutput))
-				Expect(logLevel).To(Equal(defaultLogLevel))
+			It("an error to standard error is thrown", func() {
+				expectedLoggerOutput := fmt.Sprintf(symlinkEvalFailMsg, symlink)
+				loggerOutput := captureStdErr(SetLogFile, symlink)
+				Expect(loggerOutput).To(ContainSubstring(expectedLoggerOutput))
 			})
 		})
 	})
 
 	Context("Setting the log options", func() {
-
-		logFile := "test.log"
-
-		AfterEach(func() {
-			// Clear contents of file
-			data := []byte("")
-			err := os.WriteFile(logFile, data, 0)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
 		When("the logOption's fields are all populated", func() {
 			It("logOptions should be set correctly", func() {
 				expectedLogger := &lumberjack.Logger{
@@ -251,303 +255,281 @@ var _ = Describe("CNI Logging Operations", func() {
 	})
 
 	Context("Logging messages", Ordered, func() {
-
-		logFile := "test.log"
-
-		AfterEach(func() {
-			// Clear contents of file
-			data := []byte("")
-			err := os.WriteFile(logFile, data, 0)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		AfterAll(func() {
-			// Delete test log file after all tests have run
-			err := os.Remove(logFile)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		When("logfile is set and messages are logged", Ordered, func() {
-
-			BeforeEach(func() {
-				SetLogFile(testLogFile)
-				SetLogLevel(StringToLevel("error"))
-			})
-
-			AfterAll(func() {
-				// Delete test log file after all tests have run
-				err := os.Remove(testLogFile)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should print appropriate log messages to log file including ERROR message", func() {
-				Expect(validateLogFile("error", testLogFile)).To(BeTrue())
-			})
-
-			It("should not log to standard output when disabled", func() {
-				Expect(captureStdErrLogging(validateLogFile, "error", testLogFile)).To(BeEmpty())
-			})
-
-			It("should also log to standard output when enabled", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFile, "error", testLogFile)
-
-				Expect(out).To(ContainSubstring(panicMsg))
-				Expect(out).To(ContainSubstring(errorMsg))
-				Expect(out).ToNot(ContainSubstring(infoMsg))
-				Expect(out).ToNot(ContainSubstring(debugMsg))
-				Expect(out).ToNot(ContainSubstring(verboseMsg))
-			})
-		})
-
-		When("logfile is not set and an error to standard output is thrown", Ordered, func() {
-
-			BeforeAll(func() {
-				_, err := os.Create(testLogFile)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			BeforeEach(func() {
-				SetLogLevel(StringToLevel("error"))
-			})
-
-			AfterAll(func() {
-				// Delete test log file after all tests have run
-				err := os.Remove(testLogFile)
-				Expect(err).ToNot(HaveOccurred())
-			})
-
-			It("should not log messages", func() {
-				Expect(validateLogFile("error", testLogFile)).To(BeFalse())
-			})
-		})
-
-		When("log level is set to ERROR and messages are logged", Ordered, func() {
-
-			BeforeEach(func() {
+		When("log level is set to ERROR", Ordered, func() {
+			It("should print appropriate >= error messages to log file", func() {
 				SetLogFile(logFile)
 				SetLogLevel(StringToLevel("error"))
-			})
+				SetLogStderr(false)
 
-			It("should print appropriate log messages to log file including ERROR message", func() {
-				Expect(validateLogFile("error", logFile)).To(BeTrue())
-			})
-
-			It("should not log to standard output when disabled", func() {
-				Expect(captureStdErrLogging(validateLogFile, "error", logFile)).To(BeEmpty())
-			})
-
-			It("should also log to standard output when enabled", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFile, "error", logFile)
-
-				Expect(out).To(ContainSubstring(panicMsg))
-				Expect(out).To(ContainSubstring(errorMsg))
-				Expect(out).ToNot(ContainSubstring(infoMsg))
-				Expect(out).ToNot(ContainSubstring(debugMsg))
-				Expect(out).ToNot(ContainSubstring(verboseMsg))
+				Panicf(panicMsg)
+				Expect(logFileContains(logFile, panicMsg)).To(BeTrue())
+				_ = Errorf(errorMsg)
+				Expect(logFileContains(logFile, errorMsg)).To(BeTrue())
+				Warningf(warningMsg)
+				Expect(logFileContains(logFile, warningMsg)).To(BeFalse())
+				Infof(infoMsg)
+				Expect(logFileContains(logFile, infoMsg)).To(BeFalse())
+				Debugf(debugMsg)
+				Expect(logFileContains(logFile, debugMsg)).To(BeFalse())
+				Verbosef(verboseMsg)
+				Expect(logFileContains(logFile, verboseMsg)).To(BeFalse())
 			})
 		})
 
-		When("log level is set to INFO and messages are logged", func() {
-			BeforeEach(func() {
+		When("log level is set to INFO", func() {
+			It("should print appropriate >= info messages to log file", func() {
 				SetLogFile(logFile)
 				SetLogLevel(StringToLevel("info"))
-			})
+				SetLogStderr(false)
 
-			It("should print appropriate log messages to log file including INFO message", func() {
-				Expect(validateLogFile("info", logFile)).To(BeTrue())
-			})
-
-			It("should not log to standard output when disabled", func() {
-				Expect(captureStdErrLogging(validateLogFile, "info", logFile)).To(BeEmpty())
-			})
-
-			It("should also log to standard output when enabled", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFile, "info", logFile)
-
-				Expect(out).To(ContainSubstring(panicMsg))
-				Expect(out).To(ContainSubstring(errorMsg))
-				Expect(out).To(ContainSubstring(infoMsg))
-				Expect(out).ToNot(ContainSubstring(debugMsg))
-				Expect(out).ToNot(ContainSubstring(verboseMsg))
+				Panicf(panicMsg)
+				Expect(logFileContains(logFile, panicMsg)).To(BeTrue())
+				_ = Errorf(errorMsg)
+				Expect(logFileContains(logFile, errorMsg)).To(BeTrue())
+				Warningf(warningMsg)
+				Expect(logFileContains(logFile, warningMsg)).To(BeTrue())
+				Infof(infoMsg)
+				Expect(logFileContains(logFile, infoMsg)).To(BeTrue())
+				Debugf(debugMsg)
+				Expect(logFileContains(logFile, debugMsg)).To(BeFalse())
+				Verbosef(verboseMsg)
+				Expect(logFileContains(logFile, verboseMsg)).To(BeFalse())
 			})
 		})
 
 		When("log level is set to VERBOSE and messages are logged", func() {
-			BeforeEach(func() {
+			It("should print appropriate >= verbose messages to log file", func() {
 				SetLogFile(logFile)
 				SetLogLevel(StringToLevel("verbose"))
-			})
+				SetLogStderr(false)
 
-			It("should print appropriate log messages to log file including VERBOSE message", func() {
-				Expect(validateLogFile("verbose", logFile)).To(BeTrue())
-			})
-
-			It("should not log to standard output when disabled", func() {
-				Expect(captureStdErrLogging(validateLogFile, "verbose", logFile)).To(BeEmpty())
-			})
-
-			It("should also log to standard output when enabled", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFile, "verbose", logFile)
-
-				Expect(out).To(ContainSubstring(panicMsg))
-				Expect(out).To(ContainSubstring(errorMsg))
-				Expect(out).To(ContainSubstring(infoMsg))
-				Expect(out).To(ContainSubstring(debugMsg))
-				Expect(out).To(ContainSubstring(verboseMsg))
+				Panicf(panicMsg)
+				Expect(logFileContains(logFile, panicMsg)).To(BeTrue())
+				_ = Errorf(errorMsg)
+				Expect(logFileContains(logFile, errorMsg)).To(BeTrue())
+				Warningf(warningMsg)
+				Expect(logFileContains(logFile, warningMsg)).To(BeTrue())
+				Infof(infoMsg)
+				Expect(logFileContains(logFile, infoMsg)).To(BeTrue())
+				Debugf(debugMsg)
+				Expect(logFileContains(logFile, debugMsg)).To(BeTrue())
+				Verbosef(verboseMsg)
+				Expect(logFileContains(logFile, verboseMsg)).To(BeTrue())
 			})
 		})
 
 		When("custom io.Writer is set", func() {
-			It("should log message to custom out", func() {
-				var out bytes.Buffer
-				SetLogFile(testLogFile)
+			var out bytes.Buffer
+
+			BeforeEach(func() {
+				out = bytes.Buffer{}
 				SetOutput(&out)
+				SetLogStderr(false)
+			})
+
+			It("should log message to custom out", func() {
 				Infof(infoMsg)
 				Expect(out.String()).To(ContainSubstring(infoMsg))
+			})
+
+			It("should not log to custom out after a call to SetLogFile", func() {
+				SetLogFile(logFile)
+				Infof(infoMsg)
+				Expect(out.String()).NotTo(ContainSubstring(infoMsg))
+			})
+
+			It("should not log to custom out after a call to SetLogOptions", func() {
+				SetLogOptions(nil)
+				Infof(infoMsg)
+				Expect(out.String()).NotTo(ContainSubstring(infoMsg))
+			})
+		})
+
+		When("error logging is on and file logging is off", func() {
+			BeforeEach(func() {
+				errStr := captureStdErr(SetLogStderr, true)
+				Expect(errStr).To(BeEmpty())
+				errStr = captureStdErr(SetLogFile, "")
+				Expect(errStr).To(BeEmpty())
+			})
+
+			It("only logs to stderr", func() {
+				errStr := captureStdErrEvent(Warningf, infoMsg)
+				Expect(errStr).To(ContainSubstring(infoMsg))
+				Expect(logFileContains(logFile, infoMsg)).To(BeFalse())
+			})
+		})
+
+		When("file logging is on and error logging is off", func() {
+			BeforeEach(func() {
+				errStr := captureStdErr(SetLogFile, logFile)
+				Expect(errStr).To(BeEmpty())
+				errStr = captureStdErr(SetLogStderr, false)
+				Expect(errStr).To(BeEmpty())
+			})
+
+			It("only logs to file", func() {
+				errStr := captureStdErrEvent(Infof, infoMsg)
+				Expect(errStr).To(BeEmpty())
+				Expect(logFileContains(logFile, infoMsg)).To(BeTrue())
+			})
+		})
+
+		When("file logging and error logging are turned off simultaneously", func() {
+			BeforeEach(func() {
+				_ = captureStdErr(SetLogFile, "")
+				_ = captureStdErr(SetLogStderr, false)
+			})
+
+			It("does not log anywhere", func() {
+				errStr := captureStdErrEvent(Infof, infoMsg)
+				Expect(errStr).To(BeEmpty())
+				Expect(logFileContains(logFile, infoMsg)).To(BeFalse())
+			})
+		})
+
+		When("file logging and error logging are turned on simultaneously", func() {
+			BeforeEach(func() {
+				Expect(captureStdErr(SetLogFile, logFile)).To(BeEmpty())
+				Expect(captureStdErr(SetLogStderr, true)).To(BeEmpty())
+			})
+
+			It("does log to both file and stderr", func() {
+				errStr := captureStdErrEvent(Infof, infoMsg)
+				Expect(errStr).To(ContainSubstring(infoMsg))
+				Expect(logFileContains(logFile, infoMsg)).To(BeTrue())
 			})
 		})
 	})
 
 	Context("Updating the logging prefix", Ordered, func() {
-
-		var pFormat, logFile, currentFile, expectedPrefix string
-		var prefix *customPrefix
-
 		BeforeEach(func() {
-			logFile = "test.log"
+			SetLogStderr(true)
 			SetLogFile(logFile)
-			SetLogLevel(VerboseLevel)
-		})
-
-		AfterEach(func() {
-			// Clear contents of file
-			data := []byte("")
-			err := os.WriteFile(logFile, data, 0)
-			Expect(err).ToNot(HaveOccurred())
-		})
-
-		AfterAll(func() {
-			// Delete test log file after all tests have run
-			err := os.Remove(logFile)
-			Expect(err).ToNot(HaveOccurred())
 		})
 
 		When("a custom prefix is not provided", func() {
-
-			BeforeEach(func() {
-				expectedPrefix = fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+			It("uses the default prefix", func() {
+				expectedPrefix := fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+				errStr := captureStdErrEvent(Infof, infoMsg)
+				Expect(errStr).To(ContainSubstring(expectedPrefix))
+				Expect(logFileContains(logFile, expectedPrefix)).To(BeTrue())
 			})
-
-			It("uses the default prefix when logging to standard output", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFilePrefix, logFile, expectedPrefix)
-				Expect(out).To(ContainSubstring(expectedPrefix))
-			})
-
-			It("uses the default prefix when logging to the log file", func() {
-				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
-			})
-		})
-
-		When("prefix is set back to default", func() {
-
-			BeforeEach(func() {
-				SetDefaultPrefixer()
-				expectedPrefix = fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
-			})
-
-			It("sets the default prefix when logging to standard output", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFilePrefix, logFile, expectedPrefix)
-				Expect(out).To(ContainSubstring(expectedPrefix))
-			})
-
-			It("sets the default prefix when logging to the log file", func() {
-				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
-			})
-
 		})
 
 		When("a custom prefix is provided", func() {
-
 			BeforeEach(func() {
-				pFormat = "[%s/%s] - %s: "
-				currentFile = "logging_test.go"
-				prefix = &customPrefix{
-					prefixFormat: pFormat,
-					currentFile:  currentFile,
-				}
-				SetPrefixer(prefix)
-				expectedPrefix = "[info/verbose] - logging_test.go: "
+				SetLogLevel(StringToLevel("verbose"))
+				SetPrefixer(&customPrefix{
+					prefixFormat: "[%s/%s] - %s: ",
+					currentFile:  "logging_test.go",
+				})
 			})
 
-			It("is reflected when logging to standard output", func() {
-				SetLogStderr(true)
-				out := captureStdErrLogging(validateLogFilePrefix, logFile, expectedPrefix)
-				Expect(strings.HasPrefix(out, expectedPrefix)).To(BeTrue())
+			It("uses the custom prefix", func() {
+				expectedPrefix := "[info/verbose] - logging_test.go: "
+				errStr := captureStdErrEvent(Infof, infoMsg)
+				Expect(errStr).To(ContainSubstring(expectedPrefix))
+				Expect(logFileContains(logFile, expectedPrefix)).To(BeTrue())
 			})
 
-			It("is reflected when logging to a file", func() {
-				Expect(validateLogFilePrefix(logFile, expectedPrefix)).To(BeTrue())
+			It("uses the default prefix when explicitly requesting to do so", func() {
+				SetDefaultPrefixer()
+
+				expectedPrefix := fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+				errStr := captureStdErrEvent(Infof, infoMsg)
+				Expect(errStr).To(ContainSubstring(expectedPrefix))
+				Expect(logFileContains(logFile, expectedPrefix)).To(BeTrue())
 			})
 		})
 	})
 })
 
-// Checks if the logging prints out the custom prefix
-func validateLogFilePrefix(filename, prefix string) bool {
-	// Populate the log file
-	Infof(infoMsg)
+var _ = Describe("CNI Log Level Operations", func() {
+	BeforeEach(func() {
+		initLogger()
+	})
 
-	// Read in contents of file
-	contents, err := os.ReadFile(filename)
-	if err != nil {
-		panic(err)
-	}
-	logContents := string(contents)
-	logLines := strings.Split(logContents, "\n")
-	return strings.HasPrefix(logLines[len(logLines)-2], prefix)
-}
+	Context("Log level", func() {
+		Context("Converting strings to Levels", func() {
+			When("a valid string is passed", func() {
+				It("returns the correct level value", func() {
+					Expect(StringToLevel("warning")).To(Equal(WarningLevel))
+					Expect(StringToLevel("ERROR")).To(Equal(ErrorLevel))
+					Expect(StringToLevel("vErBoSe")).To(Equal(VerboseLevel))
+				})
+			})
 
-// Checks if the correct log messages are in the log file depending on the log level set
-func validateLogFile(logLevel, filename string) bool {
-	logLevel = strings.ToLower(logLevel)
-	logFileCorrect := true
+			When("an invalid string is passed", func() {
+				It("returns -1", func() {
+					invalidLogLevel := "invalid"
+					expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
+					loggerOutput := captureStdErrStrLev(StringToLevel, invalidLogLevel)
+					Expect(loggerOutput).To(Equal(expectedLoggerOutput))
+				})
+			})
+		})
 
-	// Log the different log messages to file
-	Panicf(panicMsg)
-	_ = Errorf(errorMsg)
-	Warningf(warningMsg)
-	Infof(infoMsg)
-	Debugf(debugMsg)
-	Verbosef(verboseMsg)
+		Context("Setting the log level", func() {
+			When("a valid log level argument is passed in", func() {
+				It("sets the appropriate log level", func() {
+					// by string
+					SetLogLevel(StringToLevel("debug"))
+					Expect(logLevel).To(Equal(DebugLevel))
+					SetLogLevel(StringToLevel("info"))
+					Expect(logLevel).To(Equal(InfoLevel))
+					SetLogLevel(StringToLevel("verbose"))
+					Expect(logLevel).To(Equal(VerboseLevel))
+					SetLogLevel(StringToLevel("warning"))
+					Expect(logLevel).To(Equal(WarningLevel))
+					SetLogLevel(StringToLevel("error"))
+					Expect(logLevel).To(Equal(ErrorLevel))
+					SetLogLevel(StringToLevel("panic"))
+					Expect(logLevel).To(Equal(PanicLevel))
+					// by int
+					for i := 1; i <= 6; i++ {
+						l := Level(i)
+						SetLogLevel(l)
+						Expect(logLevel).To(Equal(l))
+					}
+					// by level
+					SetLogLevel(VerboseLevel)
+					Expect(logLevel).To(Equal(VerboseLevel))
+					SetLogLevel(WarningLevel)
+					Expect(logLevel).To(Equal(WarningLevel))
+				})
+			})
 
+			When("an invalid log level argument is passed in", func() {
+				invalidLogLevel := Level(-1)
+				It("maintains the current log level and logs an error", func() {
+					expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
+					loggerOutput := captureStdErr(SetLogLevel, invalidLogLevel)
+
+					Expect(loggerOutput).To(Equal(expectedLoggerOutput))
+					Expect(logLevel).To(Equal(defaultLogLevel))
+
+					invalidLogLevel = Level(10)
+					expectedLoggerOutput = fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
+					loggerOutput = captureStdErr(SetLogLevel, invalidLogLevel)
+
+					Expect(loggerOutput).To(Equal(expectedLoggerOutput))
+					Expect(logLevel).To(Equal(defaultLogLevel))
+				})
+			})
+		})
+	})
+
+})
+
+// Checks if the message was logged to the log file.
+func logFileContains(filename, subString string) bool {
 	// Read in the log file
 	contents, err := os.ReadFile(filename)
 	if err != nil {
-		panic(err)
+		return false
 	}
-
-	logContents := string(contents)
-
-	// Validate the appropriate messages are logged in the file based on the log level set
-	for levelStr, levelInt := range levelMap {
-		logMessageFound := strings.Contains(logContents, levelStr)
-		if !logMessageFound && levelInt <= levelMap[logLevel] {
-			logFileCorrect = false
-			break
-		}
-		if logMessageFound && levelInt > levelMap[logLevel] {
-			logFileCorrect = false
-			break
-		}
-	}
-
-	return logFileCorrect
+	return strings.Contains(string(contents), subString)
 }
 
 func openPipes() (*os.File, *os.File, *os.File) {
@@ -576,21 +558,15 @@ func closePipes(reader, writer, orig *os.File) string {
 	return buff.String()
 }
 
-func captureStdErrLogging(f func(string, string) bool, p1, p2 string) string {
-	pipeWriter, pipeReader, origWriter := openPipes()
-	f(p1, p2)
-	return closePipes(pipeWriter, pipeReader, origWriter)
-}
-
-func captureStdErrStr(f func(string), p string) string {
+func captureStdErr[T any](f func(T), p T) string {
 	pipeWriter, pipeReader, origWriter := openPipes()
 	f(p)
 	return closePipes(pipeWriter, pipeReader, origWriter)
 }
 
-func captureStdErrLev(f func(Level), p Level) string {
+func captureStdErrEvent(f func(string, ...interface{}), s string, a ...interface{}) string { //nolint:unparam
 	pipeWriter, pipeReader, origWriter := openPipes()
-	f(p)
+	f(s, a...)
 	return closePipes(pipeWriter, pipeReader, origWriter)
 }
 
