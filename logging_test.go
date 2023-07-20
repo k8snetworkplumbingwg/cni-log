@@ -150,7 +150,7 @@ var _ = Describe("CNI Logging Operations", func() {
 	Context("Setting the log level", func() {
 		When("a valid log level argument is passed in", func() {
 			It("sets the appropriate log level", func() {
-				//by string
+				// by string
 				SetLogLevel(StringToLevel("debug"))
 				Expect(logLevel).To(Equal(DebugLevel))
 				SetLogLevel(StringToLevel("INFO"))
@@ -163,13 +163,13 @@ var _ = Describe("CNI Logging Operations", func() {
 				Expect(logLevel).To(Equal(ErrorLevel))
 				SetLogLevel(StringToLevel("panic"))
 				Expect(logLevel).To(Equal(PanicLevel))
-				//by int
+				// by int
 				for i := 1; i <= 6; i++ {
 					l := Level(i)
 					SetLogLevel(l)
 					Expect(logLevel).To(Equal(l))
 				}
-				//by level
+				// by level
 				SetLogLevel(VerboseLevel)
 				Expect(logLevel).To(Equal(VerboseLevel))
 				SetLogLevel(WarningLevel)
@@ -514,8 +514,7 @@ var _ = Describe("CNI Logging Operations", func() {
 })
 
 // Checks if the logging prints out the custom prefix
-func validateLogFilePrefix(filename string, prefix string) bool {
-
+func validateLogFilePrefix(filename, prefix string) bool {
 	// Populate the log file
 	Infof(infoMsg)
 
@@ -530,8 +529,7 @@ func validateLogFilePrefix(filename string, prefix string) bool {
 }
 
 // Checks if the correct log messages are in the log file depending on the log level set
-func validateLogFile(logLevel string, filename string) bool {
-
+func validateLogFile(logLevel, filename string) bool {
 	logLevel = strings.ToLower(logLevel)
 	logFileCorrect := true
 
@@ -570,7 +568,7 @@ func validateLogFile(logLevel string, filename string) bool {
 func openPipes() (*os.File, *os.File, *os.File) {
 	origWriter := os.Stderr
 
-	pipeReader, pipeWriter, err := os.Pipe() // Initialise an IO pipe
+	pipeReader, pipeWriter, err := os.Pipe() // Initialize an IO pipe
 	if err != nil {
 		panic(err)
 	}
@@ -580,7 +578,7 @@ func openPipes() (*os.File, *os.File, *os.File) {
 	return pipeReader, pipeWriter, origWriter
 }
 
-func closePipes(reader *os.File, writer *os.File, orig *os.File) string {
+func closePipes(reader, writer, orig *os.File) string {
 	writer.Close()
 	os.Stderr = orig // Revert stderr to what it used to be
 
@@ -593,7 +591,7 @@ func closePipes(reader *os.File, writer *os.File, orig *os.File) string {
 	return buff.String()
 }
 
-func captureStdErrLogging(f func(string, string) bool, p1 string, p2 string) string {
+func captureStdErrLogging(f func(string, string) bool, p1, p2 string) string {
 	pipeWriter, pipeReader, origWriter := openPipes()
 	f(p1, p2)
 	return closePipes(pipeWriter, pipeReader, origWriter)

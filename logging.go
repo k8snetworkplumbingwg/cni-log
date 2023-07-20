@@ -257,7 +257,7 @@ func Verbosef(format string, a ...interface{}) {
 	printf(VerboseLevel, format, a...)
 }
 
-func doWrite(writer io.Writer, level Level, format string, a ...interface{}) {
+func doWritef(writer io.Writer, level Level, format string, a ...interface{}) {
 	fmt.Fprint(writer, prefixer.CreatePrefix(level))
 	fmt.Fprintf(writer, format, a...)
 	fmt.Fprintf(writer, "\n")
@@ -274,11 +274,11 @@ func printf(level Level, format string, a ...interface{}) {
 	}
 
 	if logToStderr {
-		doWrite(os.Stderr, level, format, a...)
+		doWritef(os.Stderr, level, format, a...)
 	}
 
 	if logWriter != nil {
-		doWrite(logWriter, level, format, a...)
+		doWritef(logWriter, level, format, a...)
 	}
 }
 
