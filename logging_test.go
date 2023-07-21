@@ -6,9 +6,9 @@ import (
 	"io"
 	"os"
 	"path"
+	"regexp"
 	"strings"
 	"testing"
-	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -410,10 +410,10 @@ var _ = Describe("CNI Logging Operations", func() {
 
 		When("a custom prefix is not provided", func() {
 			It("uses the default prefix", func() {
-				expectedPrefix := fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+				expectedPrefix := fmt.Sprintf(`^.* \[%s\] `, InfoLevel)
 				errStr := captureStdErrEvent(Infof, infoMsg)
-				Expect(errStr).To(ContainSubstring(expectedPrefix))
-				Expect(logFileContains(logFile, expectedPrefix)).To(BeTrue())
+				Expect(errStr).To(MatchRegexp(expectedPrefix))
+				Expect(logFileContainsRegex(logFile, expectedPrefix)).To(BeTrue())
 			})
 		})
 
@@ -436,10 +436,10 @@ var _ = Describe("CNI Logging Operations", func() {
 			It("uses the default prefix when explicitly requesting to do so", func() {
 				SetDefaultPrefixer()
 
-				expectedPrefix := fmt.Sprintf("%s [%s] ", time.Now().Format(defaultTimestampFormat), InfoLevel)
+				expectedPrefix := fmt.Sprintf(`^.* \[%s\] `, InfoLevel)
 				errStr := captureStdErrEvent(Infof, infoMsg)
-				Expect(errStr).To(ContainSubstring(expectedPrefix))
-				Expect(logFileContains(logFile, expectedPrefix)).To(BeTrue())
+				Expect(errStr).To(MatchRegexp(expectedPrefix))
+				Expect(logFileContainsRegex(logFile, expectedPrefix)).To(BeTrue())
 			})
 		})
 	})
@@ -530,6 +530,20 @@ func logFileContains(filename, subString string) bool {
 		return false
 	}
 	return strings.Contains(string(contents), subString)
+}
+
+// Checks if the message was logged to the log file by comparing to regular expression re.
+func logFileContainsRegex(filename, re string) bool {
+	// Read in the log file
+	contents, err := os.ReadFile(filename)
+	if err != nil {
+		return false
+	}
+	matched, err := regexp.MatchString(re, string(contents))
+	if err != nil {
+		panic(err)
+	}
+	return matched
 }
 
 func openPipes() (*os.File, *os.File, *os.File) {

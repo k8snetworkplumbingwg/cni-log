@@ -51,7 +51,7 @@ const (
 
 const (
 	defaultLogLevel        = InfoLevel
-	defaultTimestampFormat = time.RFC3339
+	defaultTimestampFormat = time.RFC3339Nano
 
 	logFileReqFailMsg  = "cni-log: filename is required when logging to stderr is off - will not log anything\n"
 	logFileFailMsg     = "cni-log: failed to set log file '%s'\n"
