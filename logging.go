@@ -317,13 +317,13 @@ func SetOutput(out io.Writer) {
 func Panicf(format string, a ...interface{}) {
 	printf(PanicLevel, format, a...)
 	printf(PanicLevel, "========= Stack trace output ========")
-	printf(PanicLevel, "%+v", Errorf("CNI Panic"))
+	printf(PanicLevel, "%+v", string(debug.Stack()))
 	printf(PanicLevel, "========= Stack trace output end ========")
 }
 
 // PanicStructured provides structured logging for log level >= panic.
 func PanicStructured(msg string, args ...interface{}) {
-	stackTrace := strings.Replace(string(debug.Stack()), "\n", "\\n", -1)
+	stackTrace := string(debug.Stack())
 	args = append(args, "stacktrace", stackTrace)
 	m := structuredMessage(PanicLevel, msg, args...)
 	printWithPrefixf(PanicLevel, false, m)
