@@ -200,14 +200,6 @@ func (l Level) String() string
 
 Returns the string representation of a log level
 
-##### SetLogStderr
-
-```go
-func SetLogStderr(enable bool)
-```
-
-This function allows you to enable/disable logging to standard error.
-
 ##### SetLogOptions
 
 ```go
@@ -222,7 +214,19 @@ Configures the lumberjack object based on the lumberjack configuration data set 
 func SetLogFile(filename string)
 ```
 
-Configures where logs will be written to. If an empty/invalid filepath (e.g. insufficient permissions), or a symbolic link is passed into the function, the default log filepath is used.
+Configures where logs will be written to. If an empty filepath is used, disable logging to file.
+No change will occur if an invalid filepath (e.g. insufficient permissions) or a symbolic link is passed into the
+function.
+
+##### SetLogStderr
+
+```go
+func SetLogStderr(enable bool)
+```
+
+This function allows you to enable/disable logging to standard error.
+
+> **NOTE:** For logging, a valid log file must be set or logging to stderr must be enabled.
 
 ##### SetOutput
 
@@ -250,6 +254,9 @@ This function allows you to return to the default logging prefix.
 
 #### Logging functions
 
+The logger comes with 2 sets of logging functions.
+
+`Printf` style functions:
 ```go
 // Errorf prints logging if logging level >= error
 func Errorf(format string, a ...interface{}) error 
@@ -267,12 +274,34 @@ func Debugf(format string, a ...interface{})
 func Verbosef(format string, a ...interface{})
 ```
 
+Structured (crio logging style) functions:
+```go
+// PanicStructured provides structured logging for log level >= panic.
+func PanicStructured(msg string, args ...interface{})
+
+// ErrorStructured provides structured logging for log level >= error.
+func ErrorStructured(msg string, args ...interface{}) error
+
+// WarningStructured provides structured logging for log level >= warning.
+func WarningStructured(msg string, args ...interface{})
+
+// InfoStructured provides structured logging for log level >= info.
+func InfoStructured(msg string, args ...interface{})
+
+// DebugStructured provides structured logging for log level >= debug.
+func DebugStructured(msg string, args ...interface{})
+
+// VerboseStructured provides structured logging for log level >= verbose.
+func VerboseStructured(msg string, args ...interface{})
+```
+
 ### Default values
 
 | Variable | Default Value |
 | ---     | ---           |
 | logLevel | info |
-| Logger.Filename | ``/var/log/cni-log.log`` |
+| logToStderr | true |
+| Logger.Filename | "" |
 | LogOptions.MaxSize | 100 |
 | LogOptions.MaxAge | 5 |
 | LogOptions.MaxBackups | 5 |
