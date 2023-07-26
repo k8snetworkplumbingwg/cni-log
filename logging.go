@@ -37,7 +37,6 @@ Common use of different level:
 "warning": Unusual event occurred (invalid input or system issue), but continuing
 "info":    Basic information, indication of major code paths
 "debug":   Additional information, indication of minor code branches
-"verbose": Output of larger variables in code and debug of low level functions
 */
 
 const (
@@ -46,8 +45,7 @@ const (
 	WarningLevel Level = 3
 	InfoLevel    Level = 4
 	DebugLevel   Level = 5
-	VerboseLevel Level = 6
-	maximumLevel Level = VerboseLevel
+	maximumLevel Level = DebugLevel
 )
 
 const (
@@ -69,7 +67,6 @@ var levelMap = map[string]Level{
 	"warning": WarningLevel,
 	"info":    InfoLevel,
 	"debug":   DebugLevel,
-	"verbose": VerboseLevel,
 }
 
 var logger *lumberjack.Logger
@@ -293,8 +290,6 @@ func (l Level) String() string {
 	switch l {
 	case PanicLevel:
 		return "panic"
-	case VerboseLevel:
-		return "verbose"
 	case WarningLevel:
 		return "warning"
 	case InfoLevel:
@@ -373,17 +368,6 @@ func Debugf(format string, a ...interface{}) {
 func DebugStructured(msg string, args ...interface{}) {
 	m := structuredMessage(DebugLevel, msg, args...)
 	printWithPrefixf(DebugLevel, false, m)
-}
-
-// Verbosef prints logging if logging level >= verbose
-func Verbosef(format string, a ...interface{}) {
-	printf(VerboseLevel, format, a...)
-}
-
-// VerboseStructured provides structured logging for log level >= verbose.
-func VerboseStructured(msg string, args ...interface{}) {
-	m := structuredMessage(VerboseLevel, msg, args...)
-	printWithPrefixf(VerboseLevel, false, m)
 }
 
 // structuredMessage takes msg and an even list of args and returns a structured message.
