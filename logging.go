@@ -387,7 +387,7 @@ func structuredMessage(loggingLevel Level, msg string, args ...interface{}) stri
 
 	var output []string
 	for i := 0; i < len(prefixArgs)-1; i += 2 {
-		output = append(output, fmt.Sprintf("%s=%q", prefixArgs[i], prefixArgs[i+1]))
+		output = append(output, fmt.Sprintf("%s=%q", argToString(prefixArgs[i]), argToString(prefixArgs[i+1])))
 	}
 
 	if len(args)%2 != 0 {
@@ -396,10 +396,15 @@ func structuredMessage(loggingLevel Level, msg string, args ...interface{}) stri
 	}
 
 	for i := 0; i < len(args)-1; i += 2 {
-		output = append(output, fmt.Sprintf("%s=%q", args[i], args[i+1]))
+		output = append(output, fmt.Sprintf("%s=%q", argToString(args[i]), argToString(args[i+1])))
 	}
 
 	return strings.Join(output, " ")
+}
+
+// argToString returns the string representation of the provided interface{}.
+func argToString(arg interface{}) string {
+	return fmt.Sprintf("%+v", arg)
 }
 
 // doWritef takes care of the low level writing to the output io.Writer.
