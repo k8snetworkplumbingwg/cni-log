@@ -46,6 +46,12 @@ const (
 	InfoLevel    Level = 4
 	DebugLevel   Level = 5
 	maximumLevel Level = DebugLevel
+
+	panicStr   = "panic"
+	errorStr   = "error"
+	warningStr = "warning"
+	infoStr    = "info"
+	debugStr   = "debug"
 )
 
 const (
@@ -62,11 +68,11 @@ const (
 )
 
 var levelMap = map[string]Level{
-	"panic":   PanicLevel,
-	"error":   ErrorLevel,
-	"warning": WarningLevel,
-	"info":    InfoLevel,
-	"debug":   DebugLevel,
+	panicStr:   PanicLevel,
+	errorStr:   ErrorLevel,
+	warningStr: WarningLevel,
+	infoStr:    InfoLevel,
+	debugStr:   DebugLevel,
 }
 
 var logger *lumberjack.Logger
@@ -289,15 +295,15 @@ func SetLogStderr(enable bool) {
 func (l Level) String() string {
 	switch l {
 	case PanicLevel:
-		return "panic"
+		return panicStr
 	case WarningLevel:
-		return "warning"
+		return warningStr
 	case InfoLevel:
-		return "info"
+		return infoStr
 	case ErrorLevel:
-		return "error"
+		return errorStr
 	case DebugLevel:
-		return "debug"
+		return debugStr
 	default:
 		return "unknown"
 	}

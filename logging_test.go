@@ -265,7 +265,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("log level is set to ERROR", Ordered, func() {
 			It("should print appropriate >= error messages to log file", func() {
 				SetLogFile(logFile)
-				SetLogLevel(StringToLevel("error"))
+				SetLogLevel(StringToLevel(errorStr))
 				SetLogStderr(false)
 
 				Panicf(panicMsg)
@@ -282,26 +282,26 @@ var _ = Describe("CNI Logging Operations", func() {
 
 			It("should print appropriate >= error structured messages to log file", func() {
 				SetLogFile(logFile)
-				SetLogLevel(StringToLevel("error"))
+				SetLogLevel(StringToLevel(errorStr))
 				SetLogStderr(false)
 
 				PanicStructured(panicMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="panic" msg=%q`, panicMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, panicStr, panicMsg))).To(BeTrue())
 				_ = ErrorStructured(errorMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="error" msg=%q`, errorMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, errorStr, errorMsg))).To(BeTrue())
 				WarningStructured(warningMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="warning" msg=%q`, warningMsg))).To(BeFalse())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, warningStr, warningMsg))).To(BeFalse())
 				InfoStructured(infoMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="info" msg=%q`, infoMsg))).To(BeFalse())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, infoStr, infoMsg))).To(BeFalse())
 				DebugStructured(debugMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="debug" msg=%q`, debugMsg))).To(BeFalse())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, debugStr, debugMsg))).To(BeFalse())
 			})
 		})
 
 		When("log level is set to INFO", func() {
 			It("should print appropriate >= info messages to log file", func() {
 				SetLogFile(logFile)
-				SetLogLevel(StringToLevel("info"))
+				SetLogLevel(StringToLevel(infoStr))
 				SetLogStderr(false)
 
 				Panicf(panicMsg)
@@ -318,26 +318,26 @@ var _ = Describe("CNI Logging Operations", func() {
 
 			It("should print appropriate >= info structured messages to log file", func() {
 				SetLogFile(logFile)
-				SetLogLevel(StringToLevel("info"))
+				SetLogLevel(StringToLevel(infoStr))
 				SetLogStderr(false)
 
 				PanicStructured(panicMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="panic" msg=%q`, panicMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, panicStr, panicMsg))).To(BeTrue())
 				_ = ErrorStructured(errorMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="error" msg=%q`, errorMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, errorStr, errorMsg))).To(BeTrue())
 				WarningStructured(warningMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="warning" msg=%q`, warningMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, warningStr, warningMsg))).To(BeTrue())
 				InfoStructured(infoMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="info" msg=%q`, infoMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, infoStr, infoMsg))).To(BeTrue())
 				DebugStructured(debugMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="debug" msg=%q`, debugMsg))).To(BeFalse())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, debugStr, debugMsg))).To(BeFalse())
 			})
 		})
 
 		When("log level is set to DEBUG and messages are logged", func() {
 			It("should print appropriate >= debug messages to log file", func() {
 				SetLogFile(logFile)
-				SetLogLevel(StringToLevel("debug"))
+				SetLogLevel(StringToLevel(debugStr))
 				SetLogStderr(false)
 
 				Panicf(panicMsg)
@@ -354,19 +354,19 @@ var _ = Describe("CNI Logging Operations", func() {
 
 			It("should print appropriate >= debug structured messages to log file", func() {
 				SetLogFile(logFile)
-				SetLogLevel(StringToLevel("debug"))
+				SetLogLevel(StringToLevel(debugStr))
 				SetLogStderr(false)
 
 				PanicStructured(panicMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="panic" msg=%q`, panicMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, panicStr, panicMsg))).To(BeTrue())
 				_ = ErrorStructured(errorMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="error" msg=%q`, errorMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, errorStr, errorMsg))).To(BeTrue())
 				WarningStructured(warningMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="warning" msg=%q`, warningMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, warningStr, warningMsg))).To(BeTrue())
 				InfoStructured(infoMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="info" msg=%q`, infoMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, infoStr, infoMsg))).To(BeTrue())
 				DebugStructured(debugMsg)
-				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level="debug" msg=%q`, debugMsg))).To(BeTrue())
+				Expect(logFileContainsRegex(logFile, fmt.Sprintf(`time=".*" level=%q msg=%q`, debugStr, debugMsg))).To(BeTrue())
 			})
 		})
 
@@ -478,7 +478,7 @@ var _ = Describe("CNI Logging Operations", func() {
 
 		When("a custom prefix is provided", func() {
 			BeforeEach(func() {
-				SetLogLevel(StringToLevel("debug"))
+				SetLogLevel(StringToLevel(debugStr))
 				SetPrefixer(&customPrefix{
 					prefixFormat: "[%s/%s] - %s: ",
 					currentFile:  "logging_test.go",
@@ -511,7 +511,7 @@ var _ = Describe("CNI Logging Operations", func() {
 
 		When("a custom structured prefix is not provided", func() {
 			It("uses the default prefix", func() {
-				expected := fmt.Sprintf(`time=".*" level="info" msg=%q`, infoMsg)
+				expected := fmt.Sprintf(`time=".*" level=%q msg=%q`, infoStr, infoMsg)
 				errStr := captureStdErrEvent(InfoStructured, infoMsg)
 				Expect(errStr).To(MatchRegexp(expected))
 				Expect(logFileContainsRegex(logFile, expected)).To(BeTrue())
@@ -520,14 +520,14 @@ var _ = Describe("CNI Logging Operations", func() {
 
 		When("a custom structured prefix is provided", func() {
 			BeforeEach(func() {
-				SetLogLevel(StringToLevel("debug"))
+				SetLogLevel(StringToLevel(debugStr))
 				SetStructuredPrefixer(&customPrefix{
 					currentFile: "logging_test.go",
 				})
 			})
 
 			It("uses the custom structured prefix", func() {
-				expected := fmt.Sprintf(`custom-level="info" custom-file="logging_test.go" custom-message=%q`, infoMsg)
+				expected := fmt.Sprintf(`custom-level=%q custom-file="logging_test.go" custom-message=%q`, infoStr, infoMsg)
 				errStr := captureStdErrEvent(InfoStructured, infoMsg)
 				Expect(errStr).To(MatchRegexp(expected))
 				Expect(logFileContainsRegex(logFile, expected)).To(BeTrue())
@@ -536,7 +536,7 @@ var _ = Describe("CNI Logging Operations", func() {
 			It("uses the default structured prefix when explicitly requesting to do so", func() {
 				SetDefaultStructuredPrefixer()
 
-				expected := fmt.Sprintf(`time=".*" level="info" msg=%q`, infoMsg)
+				expected := fmt.Sprintf(`time=".*" level=%q msg=%q`, infoStr, infoMsg)
 				errStr := captureStdErrEvent(InfoStructured, infoMsg)
 				Expect(errStr).To(MatchRegexp(expected))
 				Expect(logFileContainsRegex(logFile, expected)).To(BeTrue())
@@ -571,7 +571,7 @@ var _ = Describe("CNI Log Level Operations", func() {
 		Context("Converting strings to Levels", func() {
 			When("a valid string is passed", func() {
 				It("returns the correct level value", func() {
-					Expect(StringToLevel("warning")).To(Equal(WarningLevel))
+					Expect(StringToLevel(warningStr)).To(Equal(WarningLevel))
 					Expect(StringToLevel("ERROR")).To(Equal(ErrorLevel))
 					Expect(StringToLevel("dEbUg")).To(Equal(DebugLevel))
 				})
@@ -591,15 +591,15 @@ var _ = Describe("CNI Log Level Operations", func() {
 			When("a valid log level argument is passed in", func() {
 				It("sets the appropriate log level", func() {
 					// by string
-					SetLogLevel(StringToLevel("debug"))
+					SetLogLevel(StringToLevel(debugStr))
 					Expect(logLevel).To(Equal(DebugLevel))
-					SetLogLevel(StringToLevel("info"))
+					SetLogLevel(StringToLevel(infoStr))
 					Expect(logLevel).To(Equal(InfoLevel))
-					SetLogLevel(StringToLevel("warning"))
+					SetLogLevel(StringToLevel(warningStr))
 					Expect(logLevel).To(Equal(WarningLevel))
-					SetLogLevel(StringToLevel("error"))
+					SetLogLevel(StringToLevel(errorStr))
 					Expect(logLevel).To(Equal(ErrorLevel))
-					SetLogLevel(StringToLevel("panic"))
+					SetLogLevel(StringToLevel(panicStr))
 					Expect(logLevel).To(Equal(PanicLevel))
 					// by int
 					for i := 1; i <= 5; i++ {
