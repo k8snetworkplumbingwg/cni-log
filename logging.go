@@ -40,6 +40,7 @@ Common use of different level:
 */
 
 const (
+	InvalidLevel Level = -1
 	PanicLevel   Level = 1
 	ErrorLevel   Level = 2
 	WarningLevel Level = 3
@@ -52,6 +53,7 @@ const (
 	warningStr = "warning"
 	infoStr    = "info"
 	debugStr   = "debug"
+	invalidStr = "invalid"
 )
 
 const (
@@ -278,9 +280,7 @@ func StringToLevel(level string) Level {
 	if l, found := levelMap[strings.ToLower(level)]; found {
 		return l
 	}
-
-	fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
-	return -1
+	return InvalidLevel
 }
 
 // SetLogStderr sets flag for logging stderr output
@@ -304,8 +304,10 @@ func (l Level) String() string {
 		return errorStr
 	case DebugLevel:
 		return debugStr
+	case InvalidLevel:
+		return invalidStr
 	default:
-		return "unknown"
+		return invalidStr
 	}
 }
 

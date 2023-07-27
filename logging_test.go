@@ -578,11 +578,8 @@ var _ = Describe("CNI Log Level Operations", func() {
 			})
 
 			When("an invalid string is passed", func() {
-				It("returns -1", func() {
-					invalidLogLevel := "invalid"
-					expectedLoggerOutput := fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
-					loggerOutput := captureStdErrStrLev(StringToLevel, invalidLogLevel)
-					Expect(loggerOutput).To(Equal(expectedLoggerOutput))
+				It("returns InvalidLevel (-1)", func() {
+					Expect(StringToLevel(invalidStr)).To(Equal(InvalidLevel))
 				})
 			})
 		})
@@ -696,12 +693,6 @@ func captureStdErr[T any](f func(T), p T) string {
 func captureStdErrEvent(f func(string, ...interface{}), s string, a ...interface{}) string { //nolint:unparam
 	pipeWriter, pipeReader, origWriter := openPipes()
 	f(s, a...)
-	return closePipes(pipeWriter, pipeReader, origWriter)
-}
-
-func captureStdErrStrLev(f func(string) Level, p string) string {
-	pipeWriter, pipeReader, origWriter := openPipes()
-	f(p)
 	return closePipes(pipeWriter, pipeReader, origWriter)
 }
 
