@@ -93,7 +93,7 @@ type customPrefix struct {
 func main() {
   // cni-log configuration
   logging.SetLogFile("samplelog.log")
-  logging.SetLogLevel(logging.VerboseLevel)
+  logging.SetLogLevel(logging.DebugLevel)
   logging.SetLogStderr(true)
 
   // Creating the custom prefix object
@@ -172,9 +172,8 @@ Sets the log level. The valid log levels are:
 | 3 | warning | WarningLevel |
 | 4 | info | InfoLevel |
 | 5 | debug | DebugLevel |
-| 6 | verbose | VerboseLevel |
 
-The log levels above are in ascending order of verbosity. For example, setting the log level to InfoLevel would mean "panic", "error", warning", and "info" messages will get logged while "debug", and "verbose" will not.
+The log levels above are in ascending order of verbosity. For example, setting the log level to InfoLevel would mean "panic", "error", warning", and "info" messages will get logged while "debug" will not.
 
 ##### GetLogLevel
 
@@ -269,9 +268,6 @@ func Infof(format string, a ...interface{})
 
 // Debugf prints logging if logging level >= debug
 func Debugf(format string, a ...interface{})
-
-// Verbosef prints logging if logging level >= verbose
-func Verbosef(format string, a ...interface{})
 ```
 
 Structured (crio logging style) functions:
@@ -290,9 +286,6 @@ func InfoStructured(msg string, args ...interface{})
 
 // DebugStructured provides structured logging for log level >= debug.
 func DebugStructured(msg string, args ...interface{})
-
-// VerboseStructured provides structured logging for log level >= verbose.
-func VerboseStructured(msg string, args ...interface{})
 ```
 
 ### Default values

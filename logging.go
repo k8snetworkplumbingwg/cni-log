@@ -37,17 +37,23 @@ Common use of different level:
 "warning": Unusual event occurred (invalid input or system issue), but continuing
 "info":    Basic information, indication of major code paths
 "debug":   Additional information, indication of minor code branches
-"verbose": Output of larger variables in code and debug of low level functions
 */
 
 const (
+	InvalidLevel Level = -1
 	PanicLevel   Level = 1
 	ErrorLevel   Level = 2
 	WarningLevel Level = 3
 	InfoLevel    Level = 4
 	DebugLevel   Level = 5
-	VerboseLevel Level = 6
-	maximumLevel Level = VerboseLevel
+	maximumLevel Level = DebugLevel
+
+	panicStr   = "panic"
+	errorStr   = "error"
+	warningStr = "warning"
+	infoStr    = "info"
+	debugStr   = "debug"
+	invalidStr = "invalid"
 )
 
 const (
@@ -64,12 +70,11 @@ const (
 )
 
 var levelMap = map[string]Level{
-	"panic":   PanicLevel,
-	"error":   ErrorLevel,
-	"warning": WarningLevel,
-	"info":    InfoLevel,
-	"debug":   DebugLevel,
-	"verbose": VerboseLevel,
+	panicStr:   PanicLevel,
+	errorStr:   ErrorLevel,
+	warningStr: WarningLevel,
+	infoStr:    InfoLevel,
+	debugStr:   DebugLevel,
 }
 
 var logger *lumberjack.Logger
@@ -275,9 +280,7 @@ func StringToLevel(level string) Level {
 	if l, found := levelMap[strings.ToLower(level)]; found {
 		return l
 	}
-
-	fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
-	return -1
+	return InvalidLevel
 }
 
 // SetLogStderr sets flag for logging stderr output
@@ -292,19 +295,19 @@ func SetLogStderr(enable bool) {
 func (l Level) String() string {
 	switch l {
 	case PanicLevel:
-		return "panic"
-	case VerboseLevel:
-		return "verbose"
+		return panicStr
 	case WarningLevel:
-		return "warning"
+		return warningStr
 	case InfoLevel:
-		return "info"
+		return infoStr
 	case ErrorLevel:
-		return "error"
+		return errorStr
 	case DebugLevel:
-		return "debug"
+		return debugStr
+	case InvalidLevel:
+		return invalidStr
 	default:
-		return "unknown"
+		return invalidStr
 	}
 }
 
@@ -375,17 +378,6 @@ func DebugStructured(msg string, args ...interface{}) {
 	printWithPrefixf(DebugLevel, false, m)
 }
 
-// Verbosef prints logging if logging level >= verbose
-func Verbosef(format string, a ...interface{}) {
-	printf(VerboseLevel, format, a...)
-}
-
-// VerboseStructured provides structured logging for log level >= verbose.
-func VerboseStructured(msg string, args ...interface{}) {
-	m := structuredMessage(VerboseLevel, msg, args...)
-	printWithPrefixf(VerboseLevel, false, m)
-}
-
 // structuredMessage takes msg and an even list of args and returns a structured message.
 func structuredMessage(loggingLevel Level, msg string, args ...interface{}) string {
 	prefixArgs := structuredPrefixer.CreateStructuredPrefix(loggingLevel, msg)
@@ -395,7 +387,7 @@ func structuredMessage(loggingLevel Level, msg string, args ...interface{}) stri
 
 	var output []string
 	for i := 0; i < len(prefixArgs)-1; i += 2 {
-		output = append(output, fmt.Sprintf("%s=%q", prefixArgs[i], prefixArgs[i+1]))
+		output = append(output, fmt.Sprintf("%s=%q", argToString(prefixArgs[i]), argToString(prefixArgs[i+1])))
 	}
 
 	if len(args)%2 != 0 {
@@ -404,10 +396,15 @@ func structuredMessage(loggingLevel Level, msg string, args ...interface{}) stri
 	}
 
 	for i := 0; i < len(args)-1; i += 2 {
-		output = append(output, fmt.Sprintf("%s=%q", args[i], args[i+1]))
+		output = append(output, fmt.Sprintf("%s=%q", argToString(args[i]), argToString(args[i+1])))
 	}
 
 	return strings.Join(output, " ")
+}
+
+// argToString returns the string representation of the provided interface{}.
+func argToString(arg interface{}) string {
+	return fmt.Sprintf("%+v", arg)
 }
 
 // doWritef takes care of the low level writing to the output io.Writer.
