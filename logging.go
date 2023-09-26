@@ -77,13 +77,6 @@ var levelMap = map[string]Level{
 	debugStr:   DebugLevel,
 }
 
-var logger *lumberjack.Logger
-var logWriter io.Writer
-var logLevel Level
-var logToStderr bool
-var prefixer Prefixer
-var structuredPrefixer StructuredPrefixer
-
 // Prefixer creator interface. Implement this interface if you wish to create a custom prefix.
 type Prefixer interface {
 	// Produces the prefix string. CNI-Log will call this function
@@ -137,12 +130,16 @@ type LogOptions struct {
 	Compress   *bool `json:"compress,omitempty"`
 }
 
+// l is the singleton holding the logger's attributes.
+var l logging
+
 func init() {
+	l = logging{}
 	initLogger()
 }
 
 func initLogger() {
-	logger = &lumberjack.Logger{}
+	l.setLogger(&lumberjack.Logger{})
 
 	// Set default options.
 	SetLogOptions(nil)
@@ -171,12 +168,12 @@ func (p *defaultPrefixer) CreateStructuredPrefix(loggingLevel Level, message str
 
 // SetPrefixer allows overwriting the Prefixer with a custom one.
 func SetPrefixer(p Prefixer) {
-	prefixer = p
+	l.setPrefixer(p)
 }
 
 // SetStructuredPrefixer allows overwriting the StructuredPrefixer with a custom one.
 func SetStructuredPrefixer(p StructuredPrefixer) {
-	structuredPrefixer = p
+	l.setStructuredPrefixer(p)
 }
 
 // SetDefaultPrefixer sets the default Prefixer.
@@ -198,29 +195,10 @@ func SetDefaultStructuredPrefixer() {
 
 // Set the logging options (LogOptions)
 func SetLogOptions(options *LogOptions) {
-	// give some default value
-	logger.MaxSize = 100
-	logger.MaxAge = 5
-	logger.MaxBackups = 5
-	logger.Compress = true
-	if options != nil {
-		if options.MaxAge != nil {
-			logger.MaxAge = *options.MaxAge
-		}
-		if options.MaxSize != nil {
-			logger.MaxSize = *options.MaxSize
-		}
-		if options.MaxBackups != nil {
-			logger.MaxBackups = *options.MaxBackups
-		}
-		if options.Compress != nil {
-			logger.Compress = *options.Compress
-		}
-	}
-
+	l.setLogOptions(options)
 	// Update the logWriter if necessary.
-	if isFileLoggingEnabled() {
-		logWriter = logger
+	if l.isFileLoggingEnabled() {
+		l.setLoggerAsLogWriter()
 	}
 }
 
@@ -229,10 +207,10 @@ func SetLogFile(filename string) {
 	// Allow logging to stderr only. Print an error a single time when this is set to the empty string but stderr
 	// logging is off.
 	if filename == "" {
-		if !logToStderr {
+		if !l.getLogToStderr() {
 			fmt.Fprint(os.Stderr, logFileReqFailMsg)
 		}
-		disableFileLogging()
+		l.setLogFile("")
 		return
 	}
 
@@ -247,35 +225,24 @@ func SetLogFile(filename string) {
 		return
 	}
 
-	logger.Filename = filename
-	logWriter = logger
-}
-
-// disableFileLogging disables file logging.
-func disableFileLogging() {
-	logger.Filename = ""
-	logWriter = nil
-}
-
-// isFileLoggingEnabled returns true if file logging is enabled.
-func isFileLoggingEnabled() bool {
-	return logWriter != nil
+	l.setLogFile(filename)
 }
 
 // GetLogLevel gets current logging level
 func GetLogLevel() Level {
-	return logLevel
+	return l.getLogLevel()
 }
 
 // SetLogLevel sets logging level
 func SetLogLevel(level Level) {
 	if validateLogLevel(level) {
-		logLevel = level
+		l.setLogLevel(level)
 	} else {
 		fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
 	}
 }
 
+// StringToLevel converts the provided string to a log Level. If the provided level is invalid, it returns InvalidLevel.
 func StringToLevel(level string) Level {
 	if l, found := levelMap[strings.ToLower(level)]; found {
 		return l
@@ -285,10 +252,10 @@ func StringToLevel(level string) Level {
 
 // SetLogStderr sets flag for logging stderr output
 func SetLogStderr(enable bool) {
-	if !enable && !isFileLoggingEnabled() {
+	if !enable && !l.isFileLoggingEnabled() {
 		fmt.Fprint(os.Stderr, logFileReqFailMsg)
 	}
-	logToStderr = enable
+	l.setLogToStderr(enable)
 }
 
 // String converts a Level into its string representation.
@@ -313,7 +280,7 @@ func (l Level) String() string {
 
 // SetOutput set custom output WARNING subsequent call to SetLogFile or SetLogOptions invalidates this setting
 func SetOutput(out io.Writer) {
-	logWriter = out
+	l.setLogWriter(out)
 }
 
 // Panicf prints logging plus stack trace. This should be used only for unrecoverable error
@@ -380,7 +347,7 @@ func DebugStructured(msg string, args ...interface{}) {
 
 // structuredMessage takes msg and an even list of args and returns a structured message.
 func structuredMessage(loggingLevel Level, msg string, args ...interface{}) string {
-	prefixArgs := structuredPrefixer.CreateStructuredPrefix(loggingLevel, msg)
+	prefixArgs := l.getStructuredPrefixer().CreateStructuredPrefix(loggingLevel, msg)
 	if len(prefixArgs)%2 != 0 {
 		panic(fmt.Sprintf("msg=%q logging_failure=%q", msg, structuredPrefixerOddArguments))
 	}
@@ -421,24 +388,24 @@ func printf(level Level, format string, a ...interface{}) {
 // printWithPrefixf prints log messages if they match the configured log level. Messages are optionally prepended by a
 // configured prefix.
 func printWithPrefixf(level Level, printPrefix bool, format string, a ...interface{}) {
-	if level > logLevel {
+	if level > l.getLogLevel() {
 		return
 	}
 
-	if !isFileLoggingEnabled() && !logToStderr {
+	if !l.isFileLoggingEnabled() && !l.logToStderr {
 		return
 	}
 
 	if printPrefix {
-		format = prefixer.CreatePrefix(level) + format
+		format = l.getPrefixer().CreatePrefix(level) + format
 	}
 
-	if logToStderr {
+	if l.getLogToStderr() {
 		doWritef(os.Stderr, format, a...)
 	}
 
-	if isFileLoggingEnabled() {
-		doWritef(logWriter, format, a...)
+	if l.isFileLoggingEnabled() {
+		doWritef(l.getLogWriter(), format, a...)
 	}
 }
 

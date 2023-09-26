@@ -63,11 +63,11 @@ var _ = Describe("CNI Logging Operations", func() {
 	Context("Default settings", func() {
 		When("the defaults are used", func() {
 			It("logs to stderr", func() {
-				Expect(logToStderr).To(BeTrue())
+				Expect(l.getLogToStderr()).To(BeTrue())
 			})
 
 			It("does not log to file", func() {
-				Expect(isFileLoggingEnabled()).To(BeFalse())
+				Expect(l.isFileLoggingEnabled()).To(BeFalse())
 			})
 		})
 	})
@@ -134,7 +134,7 @@ var _ = Describe("CNI Logging Operations", func() {
 		When("the log file name is valid", func() {
 			It("prepares the logger's writer and creates the log file", func() {
 				SetLogFile(logFile)
-				Expect(logWriter).To(Equal(logger))
+				Expect(l.getLogWriter()).To(Equal(l.getLogger()))
 				Expect(logFile).To(BeAnExistingFile())
 			})
 		})
@@ -153,7 +153,7 @@ var _ = Describe("CNI Logging Operations", func() {
 
 			It("should be created", func() {
 				SetLogFile(logFile)
-				Expect(logWriter).To(Equal(logger))
+				Expect(l.getLogWriter()).To(Equal(l.getLogger()))
 				Expect(logFile).To(BeAnExistingFile())
 			})
 		})
@@ -221,7 +221,7 @@ var _ = Describe("CNI Logging Operations", func() {
 					Compress:   getPrimitivePointer(true),
 				}
 				SetLogOptions(logOpts)
-				Expect(logger).To(Equal(expectedLogger))
+				Expect(l.getLogger()).To(Equal(expectedLogger))
 			})
 		})
 
@@ -240,7 +240,7 @@ var _ = Describe("CNI Logging Operations", func() {
 					Compress:   getPrimitivePointer(true),
 				}
 				SetLogOptions(logOpts)
-				Expect(logger).To(Equal(expectedLogger))
+				Expect(l.getLogger()).To(Equal(expectedLogger))
 			})
 		})
 
@@ -256,7 +256,7 @@ var _ = Describe("CNI Logging Operations", func() {
 				}
 
 				SetLogOptions(nil)
-				Expect(logger).To(Equal(expectedLogger))
+				Expect(l.getLogger()).To(Equal(expectedLogger))
 			})
 		})
 	})
@@ -558,7 +558,45 @@ var _ = Describe("CNI Logging Operations", func() {
 					fmt.Sprintf(`^msg=%q logging_failure=%q$`, infoMsg, structuredPrefixerOddArguments))))
 			})
 		})
+	})
 
+	Context("Logging from different go routines", Ordered, func() {
+		var logFile2 string
+
+		BeforeEach(func() {
+			tempDir := os.TempDir()
+			logFile2 = path.Join(tempDir, "test2.log")
+
+			SetLogFile(logFile)
+			SetLogStderr(false)
+		})
+
+		AfterEach(func() {
+			Expect(os.RemoveAll(logFile2)).To(Succeed())
+		})
+
+		When("another go routine manipulates the logger", func() {
+			It("does not cause a race condition", func() {
+				go func() {
+					SetLogFile(logFile2)
+					logOpts := &LogOptions{
+						MaxAge:     getPrimitivePointer(1),
+						MaxSize:    getPrimitivePointer(10),
+						MaxBackups: getPrimitivePointer(1),
+						Compress:   getPrimitivePointer(true),
+					}
+					SetLogOptions(logOpts)
+					SetLogLevel(StringToLevel(debugStr))
+					InfoStructured(infoMsg)
+				}()
+				// expected := fmt.Sprintf(`time=".*" level=%q msg=%q`, infoStr, infoMsg)
+				SetLogOptions(nil)
+				SetLogLevel(StringToLevel(warningStr))
+				errStr := captureStdErrEvent(InfoStructured, infoMsg)
+				Expect(errStr).To(BeEmpty())
+				// Expect(logFileContainsRegex(logFile, expected)).To(BeTrue())
+			})
+		})
 	})
 })
 
@@ -589,26 +627,26 @@ var _ = Describe("CNI Log Level Operations", func() {
 				It("sets the appropriate log level", func() {
 					// by string
 					SetLogLevel(StringToLevel(debugStr))
-					Expect(logLevel).To(Equal(DebugLevel))
+					Expect(l.getLogLevel()).To(Equal(DebugLevel))
 					SetLogLevel(StringToLevel(infoStr))
-					Expect(logLevel).To(Equal(InfoLevel))
+					Expect(l.getLogLevel()).To(Equal(InfoLevel))
 					SetLogLevel(StringToLevel(warningStr))
-					Expect(logLevel).To(Equal(WarningLevel))
+					Expect(l.getLogLevel()).To(Equal(WarningLevel))
 					SetLogLevel(StringToLevel(errorStr))
-					Expect(logLevel).To(Equal(ErrorLevel))
+					Expect(l.getLogLevel()).To(Equal(ErrorLevel))
 					SetLogLevel(StringToLevel(panicStr))
-					Expect(logLevel).To(Equal(PanicLevel))
+					Expect(l.getLogLevel()).To(Equal(PanicLevel))
 					// by int
 					for i := 1; i <= 5; i++ {
-						l := Level(i)
-						SetLogLevel(l)
-						Expect(logLevel).To(Equal(l))
+						lvl := Level(i)
+						SetLogLevel(lvl)
+						Expect(l.getLogLevel()).To(Equal(lvl))
 					}
 					// by level
 					SetLogLevel(DebugLevel)
-					Expect(logLevel).To(Equal(DebugLevel))
+					Expect(l.getLogLevel()).To(Equal(DebugLevel))
 					SetLogLevel(WarningLevel)
-					Expect(logLevel).To(Equal(WarningLevel))
+					Expect(l.getLogLevel()).To(Equal(WarningLevel))
 				})
 			})
 
@@ -619,14 +657,14 @@ var _ = Describe("CNI Log Level Operations", func() {
 					loggerOutput := captureStdErr(SetLogLevel, invalidLogLevel)
 
 					Expect(loggerOutput).To(Equal(expectedLoggerOutput))
-					Expect(logLevel).To(Equal(defaultLogLevel))
+					Expect(l.getLogLevel()).To(Equal(defaultLogLevel))
 
 					invalidLogLevel = Level(10)
 					expectedLoggerOutput = fmt.Sprintf(setLevelFailMsg, invalidLogLevel)
 					loggerOutput = captureStdErr(SetLogLevel, invalidLogLevel)
 
 					Expect(loggerOutput).To(Equal(expectedLoggerOutput))
-					Expect(logLevel).To(Equal(defaultLogLevel))
+					Expect(l.getLogLevel()).To(Equal(defaultLogLevel))
 				})
 			})
 		})
