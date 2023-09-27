@@ -14,7 +14,9 @@
 
 package logging
 
-import "strings"
+import (
+	"strings"
+)
 
 /*
 Common use of different level:
@@ -74,13 +76,16 @@ func (l Level) String() string {
 	}
 }
 
+// IsValid returns true if this logging level is valid.
+func (l Level) IsValid() bool {
+	return l > 0 && l <= maximumLevel
+}
+
+// StringToLevel takes a string representation of a level and converts it to type Level. If a string cannot be parsed,
+// the InvalidLevel is returned.
 func StringToLevel(level string) Level {
 	if l, found := levelMap[strings.ToLower(level)]; found {
 		return l
 	}
 	return InvalidLevel
-}
-
-func validateLogLevel(level Level) bool {
-	return level > 0 && level <= maximumLevel
 }

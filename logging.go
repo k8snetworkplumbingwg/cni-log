@@ -172,7 +172,7 @@ func GetLogLevel() Level {
 
 // SetLogLevel sets logging level
 func SetLogLevel(level Level) {
-	if validateLogLevel(level) {
+	if level.IsValid() {
 		logLevel = level
 	} else {
 		fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
