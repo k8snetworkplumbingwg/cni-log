@@ -26,36 +26,6 @@ import (
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Level type
-type Level int
-
-/*
-Common use of different level:
-
-"panic":   Code crash
-"error":   Unusual event occurred (invalid input or system issue), so exiting code prematurely
-"warning": Unusual event occurred (invalid input or system issue), but continuing
-"info":    Basic information, indication of major code paths
-"debug":   Additional information, indication of minor code branches
-*/
-
-const (
-	InvalidLevel Level = -1
-	PanicLevel   Level = 1
-	ErrorLevel   Level = 2
-	WarningLevel Level = 3
-	InfoLevel    Level = 4
-	DebugLevel   Level = 5
-	maximumLevel Level = DebugLevel
-
-	panicStr   = "panic"
-	errorStr   = "error"
-	warningStr = "warning"
-	infoStr    = "info"
-	debugStr   = "debug"
-	invalidStr = "invalid"
-)
-
 const (
 	defaultLogLevel        = InfoLevel
 	defaultTimestampFormat = time.RFC3339Nano
@@ -69,65 +39,12 @@ const (
 	structuredPrefixerOddArguments = "prefixer must return an even number of arguments for structured logging"
 )
 
-var levelMap = map[string]Level{
-	panicStr:   PanicLevel,
-	errorStr:   ErrorLevel,
-	warningStr: WarningLevel,
-	infoStr:    InfoLevel,
-	debugStr:   DebugLevel,
-}
-
 var logger *lumberjack.Logger
 var logWriter io.Writer
 var logLevel Level
 var logToStderr bool
 var prefixer Prefixer
 var structuredPrefixer StructuredPrefixer
-
-// Prefixer creator interface. Implement this interface if you wish to create a custom prefix.
-type Prefixer interface {
-	// Produces the prefix string. CNI-Log will call this function
-	// to request for the prefix when building the logging output and will pass in the appropriate
-	// log level of your log message.
-	CreatePrefix(Level) string
-}
-
-// PrefixerFunc implements the Prefixer interface. It allows passing a function instead of a struct as the prefixer.
-type PrefixerFunc func(Level) string
-
-// Produces the prefix string. CNI-Log will call this function
-// to request for the prefix when building the logging output and will pass in the appropriate
-// log level of your log message.
-func (f PrefixerFunc) CreatePrefix(loggingLevel Level) string {
-	return f(loggingLevel)
-}
-
-// StructuredPrefixer creator interface. Implement this interface if you wish to to create a custom prefix for
-// structured logging.
-type StructuredPrefixer interface {
-	// Produces the prefix string for structured logging. CNI-Log will call this function
-	// to request for the prefix when building the logging output and will pass in the appropriate
-	// log level of your log message.
-	CreateStructuredPrefix(Level, string) []interface{}
-}
-
-// StructuredPrefixerFunc implements the StructuredPrefixer interface. It allows passing a function instead of a struct
-// as the prefixer.
-type StructuredPrefixerFunc func(Level, string) []interface{}
-
-// Produces the prefix string for structured logging. CNI-Log will call this function
-// to request for the prefix when building the logging output and will pass in the appropriate
-// log level of your log message.
-func (f StructuredPrefixerFunc) CreateStructuredPrefix(loggingLevel Level, msg string) []interface{} {
-	return f(loggingLevel, msg)
-}
-
-// Defines a default prefixer which will be used if a custom prefix is not provided. It implements both the Prefixer
-// and the StructuredPrefixer interface.
-type defaultPrefixer struct {
-	prefixFormat string
-	timeFormat   string
-}
 
 // LogOptions defines the configuration of the lumberjack logger
 type LogOptions struct {
@@ -153,20 +70,6 @@ func initLogger() {
 	// Create the default prefixer
 	SetDefaultPrefixer()
 	SetDefaultStructuredPrefixer()
-}
-
-// CreatePrefix implements the Prefixer interface for the defaultPrefixer.
-func (p *defaultPrefixer) CreatePrefix(loggingLevel Level) string {
-	return fmt.Sprintf(p.prefixFormat, time.Now().Format(p.timeFormat), loggingLevel)
-}
-
-// CreateStructuredPrefix implements the StructuredPrefixer interface for the defaultPrefixer.
-func (p *defaultPrefixer) CreateStructuredPrefix(loggingLevel Level, message string) []interface{} {
-	return []interface{}{
-		"time", time.Now().Format(p.timeFormat),
-		"level", loggingLevel,
-		"msg", message,
-	}
 }
 
 // SetPrefixer allows overwriting the Prefixer with a custom one.
@@ -276,39 +179,12 @@ func SetLogLevel(level Level) {
 	}
 }
 
-func StringToLevel(level string) Level {
-	if l, found := levelMap[strings.ToLower(level)]; found {
-		return l
-	}
-	return InvalidLevel
-}
-
 // SetLogStderr sets flag for logging stderr output
 func SetLogStderr(enable bool) {
 	if !enable && !isFileLoggingEnabled() {
 		fmt.Fprint(os.Stderr, logFileReqFailMsg)
 	}
 	logToStderr = enable
-}
-
-// String converts a Level into its string representation.
-func (l Level) String() string {
-	switch l {
-	case PanicLevel:
-		return panicStr
-	case WarningLevel:
-		return warningStr
-	case InfoLevel:
-		return infoStr
-	case ErrorLevel:
-		return errorStr
-	case DebugLevel:
-		return debugStr
-	case InvalidLevel:
-		return invalidStr
-	default:
-		return invalidStr
-	}
 }
 
 // SetOutput set custom output WARNING subsequent call to SetLogFile or SetLogOptions invalidates this setting
@@ -490,8 +366,4 @@ func resolvePath(path string) (string, error) {
 	}
 
 	return filepath.Clean(path), nil
-}
-
-func validateLogLevel(level Level) bool {
-	return level > 0 && level <= maximumLevel
 }
