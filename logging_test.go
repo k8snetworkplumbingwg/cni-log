@@ -558,7 +558,43 @@ var _ = Describe("CNI Logging Operations", func() {
 					fmt.Sprintf(`^msg=%q logging_failure=%q$`, infoMsg, structuredPrefixerOddArguments))))
 			})
 		})
+	})
 
+	Context("Logging from different go routines", Ordered, func() {
+		var logFile2 string
+
+		BeforeEach(func() {
+			tempDir := os.TempDir()
+			logFile2 = path.Join(tempDir, "test2.log")
+
+			SetLogFile(logFile)
+			SetLogStderr(false)
+		})
+
+		AfterEach(func() {
+			Expect(os.RemoveAll(logFile2)).To(Succeed())
+		})
+
+		When("another go routine manipulates the logger", func() {
+			It("does not cause a race condition", func() {
+				go func() {
+					SetLogFile(logFile2)
+					logOpts := &LogOptions{
+						MaxAge:     getPrimitivePointer(1),
+						MaxSize:    getPrimitivePointer(10),
+						MaxBackups: getPrimitivePointer(1),
+						Compress:   getPrimitivePointer(true),
+					}
+					SetLogOptions(logOpts)
+					SetLogLevel(StringToLevel(debugStr))
+					InfoStructured(infoMsg)
+				}()
+				SetLogOptions(nil)
+				SetLogLevel(StringToLevel(warningStr))
+				errStr := captureStdErrEvent(InfoStructured, infoMsg)
+				Expect(errStr).To(BeEmpty())
+			})
+		})
 	})
 })
 
