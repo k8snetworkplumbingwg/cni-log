@@ -23,41 +23,15 @@ import (
 	"strings"
 	"time"
 
+	"github.com/k8snetworkplumbingwg/cni-log/pkg/level"
+	"github.com/k8snetworkplumbingwg/cni-log/pkg/options"
+	"github.com/k8snetworkplumbingwg/cni-log/pkg/prefixer"
+	"github.com/k8snetworkplumbingwg/cni-log/pkg/state"
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 )
 
-// Level type
-type Level int
-
-/*
-Common use of different level:
-
-"panic":   Code crash
-"error":   Unusual event occurred (invalid input or system issue), so exiting code prematurely
-"warning": Unusual event occurred (invalid input or system issue), but continuing
-"info":    Basic information, indication of major code paths
-"debug":   Additional information, indication of minor code branches
-*/
-
 const (
-	InvalidLevel Level = -1
-	PanicLevel   Level = 1
-	ErrorLevel   Level = 2
-	WarningLevel Level = 3
-	InfoLevel    Level = 4
-	DebugLevel   Level = 5
-	maximumLevel Level = DebugLevel
-
-	panicStr   = "panic"
-	errorStr   = "error"
-	warningStr = "warning"
-	infoStr    = "info"
-	debugStr   = "debug"
-	invalidStr = "invalid"
-)
-
-const (
-	defaultLogLevel        = InfoLevel
+	defaultLogLevel        = level.Info
 	defaultTimestampFormat = time.RFC3339Nano
 
 	logFileReqFailMsg              = "cni-log: filename is required when logging to stderr is off - will not log anything\n"
@@ -69,77 +43,15 @@ const (
 	structuredPrefixerOddArguments = "prefixer must return an even number of arguments for structured logging"
 )
 
-var levelMap = map[string]Level{
-	panicStr:   PanicLevel,
-	errorStr:   ErrorLevel,
-	warningStr: WarningLevel,
-	infoStr:    InfoLevel,
-	debugStr:   DebugLevel,
-}
-
-// Prefixer creator interface. Implement this interface if you wish to create a custom prefix.
-type Prefixer interface {
-	// Produces the prefix string. CNI-Log will call this function
-	// to request for the prefix when building the logging output and will pass in the appropriate
-	// log level of your log message.
-	CreatePrefix(Level) string
-}
-
-// PrefixerFunc implements the Prefixer interface. It allows passing a function instead of a struct as the prefixer.
-type PrefixerFunc func(Level) string
-
-// Produces the prefix string. CNI-Log will call this function
-// to request for the prefix when building the logging output and will pass in the appropriate
-// log level of your log message.
-func (f PrefixerFunc) CreatePrefix(loggingLevel Level) string {
-	return f(loggingLevel)
-}
-
-// StructuredPrefixer creator interface. Implement this interface if you wish to to create a custom prefix for
-// structured logging.
-type StructuredPrefixer interface {
-	// Produces the prefix string for structured logging. CNI-Log will call this function
-	// to request for the prefix when building the logging output and will pass in the appropriate
-	// log level of your log message.
-	CreateStructuredPrefix(Level, string) []interface{}
-}
-
-// StructuredPrefixerFunc implements the StructuredPrefixer interface. It allows passing a function instead of a struct
-// as the prefixer.
-type StructuredPrefixerFunc func(Level, string) []interface{}
-
-// Produces the prefix string for structured logging. CNI-Log will call this function
-// to request for the prefix when building the logging output and will pass in the appropriate
-// log level of your log message.
-func (f StructuredPrefixerFunc) CreateStructuredPrefix(loggingLevel Level, msg string) []interface{} {
-	return f(loggingLevel, msg)
-}
-
-// Defines a default prefixer which will be used if a custom prefix is not provided. It implements both the Prefixer
-// and the StructuredPrefixer interface.
-type defaultPrefixer struct {
-	prefixFormat string
-	timeFormat   string
-}
-
-// LogOptions defines the configuration of the lumberjack logger
-type LogOptions struct {
-	MaxAge     *int  `json:"maxAge,omitempty"`
-	MaxSize    *int  `json:"maxSize,omitempty"`
-	MaxBackups *int  `json:"maxBackups,omitempty"`
-	Compress   *bool `json:"compress,omitempty"`
-}
-
-// l is the singleton holding the logger's attributes.
-var l logging
+// s is the singleton holding the logger's attributes.
+var s = state.Instance()
 
 func init() {
-	l = logging{}
 	initLogger()
 }
 
 func initLogger() {
-	l.setLogger(&lumberjack.Logger{})
+	s.SetLogger(&lumberjack.Logger{})
 
 	// Set default options.
 	SetLogOptions(nil)
@@ -152,53 +64,39 @@ func initLogger() {
 	SetDefaultStructuredPrefixer()
 }
 
-// CreatePrefix implements the Prefixer interface for the defaultPrefixer.
-func (p *defaultPrefixer) CreatePrefix(loggingLevel Level) string {
-	return fmt.Sprintf(p.prefixFormat, time.Now().Format(p.timeFormat), loggingLevel)
-}
-
-// CreateStructuredPrefix implements the StructuredPrefixer interface for the defaultPrefixer.
-func (p *defaultPrefixer) CreateStructuredPrefix(loggingLevel Level, message string) []interface{} {
-	return []interface{}{
-		"time", time.Now().Format(p.timeFormat),
-		"level", loggingLevel,
-		"msg", message,
-	}
-}
-
 // SetPrefixer allows overwriting the Prefixer with a custom one.
-func SetPrefixer(p Prefixer) {
-	l.setPrefixer(p)
+func SetPrefixer(p prefixer.Prefixer) {
+	s.SetPrefixer(p)
 }
 
 // SetStructuredPrefixer allows overwriting the StructuredPrefixer with a custom one.
-func SetStructuredPrefixer(p StructuredPrefixer) {
-	l.setStructuredPrefixer(p)
+func SetStructuredPrefixer(p prefixer.StructuredPrefixer) {
+	s.SetStructuredPrefixer(p)
 }
 
 // SetDefaultPrefixer sets the default Prefixer.
 func SetDefaultPrefixer() {
-	defaultPrefix := &defaultPrefixer{
-		prefixFormat: "%s [%s] ",
-		timeFormat:   defaultTimestampFormat,
+	defaultPrefix := &prefixer.Default{
+		PrefixFormat: "%s [%s] ",
+		TimeFormat:   defaultTimestampFormat,
 	}
 	SetPrefixer(defaultPrefix)
 }
 
 // SetDefaultStructuredPrefixer sets the default StructuredPrefixer.
 func SetDefaultStructuredPrefixer() {
-	defaultStructuredPrefix := &defaultPrefixer{
-		timeFormat: defaultTimestampFormat,
+	defaultStructuredPrefix := &prefixer.Default{
+		TimeFormat: defaultTimestampFormat,
 	}
 	SetStructuredPrefixer(defaultStructuredPrefix)
 }
 
 // Set the logging options (LogOptions)
-func SetLogOptions(options *LogOptions) {
-	l.setLogOptions(options)
+func SetLogOptions(o *options.Options) {
+	s.SetLogOptions(o)
 	// Update the logWriter if necessary.
-	if l.isFileLoggingEnabled() {
-		l.setLoggerAsLogWriter()
+	if s.IsFileLoggingEnabled() {
+		s.SetLoggerAsLogWriter()
 	}
 }
 
@@ -207,10 +105,10 @@ func SetLogFile(filename string) {
 	// Allow logging to stderr only. Print an error a single time when this is set to the empty string but stderr
 	// logging is off.
 	if filename == "" {
-		if !l.getLogToStderr() {
+		if !s.GetLogToStderr() {
 			fmt.Fprint(os.Stderr, logFileReqFailMsg)
 		}
-		l.setLogFile("")
+		s.SetLogFile("")
 		return
 	}
 
@@ -225,129 +123,101 @@ func SetLogFile(filename string) {
 		return
 	}
 
-	l.setLogFile(filename)
+	s.SetLogFile(filename)
 }
 
-// GetLogLevel gets current logging level
-func GetLogLevel() Level {
-	return l.getLogLevel()
+// GetLogLevel gets current logging level.
+func GetLogLevel() level.Level {
+	return s.GetLogLevel()
 }
 
-// SetLogLevel sets logging level
-func SetLogLevel(level Level) {
-	if validateLogLevel(level) {
-		l.setLogLevel(level)
+// SetLogLevel sets logging level.
+func SetLogLevel(l level.Level) {
+	if l.IsValid() {
+		s.SetLogLevel(l)
 	} else {
-		fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
+		fmt.Fprintf(os.Stderr, setLevelFailMsg, l)
 	}
 }
 
-// StringToLevel converts the provided string to a log Level. If the provided level is invalid, it returns InvalidLevel.
-func StringToLevel(level string) Level {
-	if l, found := levelMap[strings.ToLower(level)]; found {
-		return l
-	}
-	return InvalidLevel
-}
-
-// SetLogStderr sets flag for logging stderr output
+// SetLogStderr sets flag for logging stderr output.
 func SetLogStderr(enable bool) {
-	if !enable && !l.isFileLoggingEnabled() {
+	if !enable && !s.IsFileLoggingEnabled() {
 		fmt.Fprint(os.Stderr, logFileReqFailMsg)
 	}
-	l.setLogToStderr(enable)
+	s.SetLogToStderr(enable)
 }
 
-// String converts a Level into its string representation.
-func (l Level) String() string {
-	switch l {
-	case PanicLevel:
-		return panicStr
-	case WarningLevel:
-		return warningStr
-	case InfoLevel:
-		return infoStr
-	case ErrorLevel:
-		return errorStr
-	case DebugLevel:
-		return debugStr
-	case InvalidLevel:
-		return invalidStr
-	default:
-		return invalidStr
-	}
-}
-
-// SetOutput set custom output WARNING subsequent call to SetLogFile or SetLogOptions invalidates this setting
+// SetOutput set custom output. Warning: A subsequent call to SetLogFile or SetLogOptions invalidates this setting.
 func SetOutput(out io.Writer) {
-	l.setLogWriter(out)
+	s.SetLogWriter(out)
 }
 
-// Panicf prints logging plus stack trace. This should be used only for unrecoverable error
+// Panicf prints logging plus stack trace. This should be used only for unrecoverable error.
 func Panicf(format string, a ...interface{}) {
-	printf(PanicLevel, format, a...)
-	printf(PanicLevel, "========= Stack trace output ========")
-	printf(PanicLevel, "%+v", string(debug.Stack()))
-	printf(PanicLevel, "========= Stack trace output end ========")
+	printf(level.Panic, format, a...)
+	printf(level.Panic, "========= Stack trace output ========")
+	printf(level.Panic, "%+v", string(debug.Stack()))
+	printf(level.Panic, "========= Stack trace output end ========")
 }
 
 // PanicStructured provides structured logging for log level >= panic.
 func PanicStructured(msg string, args ...interface{}) {
 	stackTrace := string(debug.Stack())
 	args = append(args, "stacktrace", stackTrace)
-	m := structuredMessage(PanicLevel, msg, args...)
-	printWithPrefixf(PanicLevel, false, m)
+	m := structuredMessage(level.Panic, msg, args...)
+	printWithPrefixf(level.Panic, false, m)
 }
 
 // Errorf prints logging if logging level >= error
 func Errorf(format string, a ...interface{}) error {
-	printf(ErrorLevel, format, a...)
+	printf(level.Error, format, a...)
 	return fmt.Errorf(format, a...)
 }
 
 // ErrorStructured provides structured logging for log level >= error.
 func ErrorStructured(msg string, args ...interface{}) error {
-	m := structuredMessage(ErrorLevel, msg, args...)
-	printWithPrefixf(ErrorLevel, false, m)
+	m := structuredMessage(level.Error, msg, args...)
+	printWithPrefixf(level.Error, false, m)
 	return fmt.Errorf("%s", m)
 }
 
 // Warningf prints logging if logging level >= warning
 func Warningf(format string, a ...interface{}) {
-	printf(WarningLevel, format, a...)
+	printf(level.Warning, format, a...)
 }
 
 // WarningStructured provides structured logging for log level >= warning.
 func WarningStructured(msg string, args ...interface{}) {
-	m := structuredMessage(WarningLevel, msg, args...)
-	printWithPrefixf(WarningLevel, false, m)
+	m := structuredMessage(level.Warning, msg, args...)
+	printWithPrefixf(level.Warning, false, m)
 }
 
 // Infof prints logging if logging level >= info
 func Infof(format string, a ...interface{}) {
-	printf(InfoLevel, format, a...)
+	printf(level.Info, format, a...)
 }
 
 // InfoStructured provides structured logging for log level >= info.
 func InfoStructured(msg string, args ...interface{}) {
-	m := structuredMessage(InfoLevel, msg, args...)
-	printWithPrefixf(InfoLevel, false, m)
+	m := structuredMessage(level.Info, msg, args...)
+	printWithPrefixf(level.Info, false, m)
 }
 
 // Debugf prints logging if logging level >= debug
 func Debugf(format string, a ...interface{}) {
-	printf(DebugLevel, format, a...)
+	printf(level.Debug, format, a...)
 }
 
 // DebugStructured provides structured logging for log level >= debug.
 func DebugStructured(msg string, args ...interface{}) {
-	m := structuredMessage(DebugLevel, msg, args...)
-	printWithPrefixf(DebugLevel, false, m)
+	m := structuredMessage(level.Debug, msg, args...)
+	printWithPrefixf(level.Debug, false, m)
 }
 
 // structuredMessage takes msg and an even list of args and returns a structured message.
-func structuredMessage(loggingLevel Level, msg string, args ...interface{}) string {
-	prefixArgs := l.getStructuredPrefixer().CreateStructuredPrefix(loggingLevel, msg)
+func structuredMessage(loggingLevel level.Level, msg string, args ...interface{}) string {
+	prefixArgs := s.GetStructuredPrefixer().CreateStructuredPrefix(loggingLevel, msg)
 	if len(prefixArgs)%2 != 0 {
 		panic(fmt.Sprintf("msg=%q logging_failure=%q", msg, structuredPrefixerOddArguments))
 	}
@@ -381,31 +251,31 @@ func doWritef(writer io.Writer, format string, a ...interface{}) {
 }
 
 // printf prints log messages if they match the configured log level. A configured prefix is prepended to messages.
-func printf(level Level, format string, a ...interface{}) {
-	printWithPrefixf(level, true, format, a...)
+func printf(l level.Level, format string, a ...interface{}) {
+	printWithPrefixf(l, true, format, a...)
 }
 
 // printWithPrefixf prints log messages if they match the configured log level. Messages are optionally prepended by a
 // configured prefix.
-func printWithPrefixf(level Level, printPrefix bool, format string, a ...interface{}) {
-	if level > l.getLogLevel() {
+func printWithPrefixf(l level.Level, printPrefix bool, format string, a ...interface{}) {
+	if l > s.GetLogLevel() {
 		return
 	}
 
-	if !l.isFileLoggingEnabled() && !l.logToStderr {
+	if !s.IsFileLoggingEnabled() && !s.GetLogToStderr() {
 		return
 	}
 
 	if printPrefix {
-		format = l.getPrefixer().CreatePrefix(level) + format
+		format = s.GetPrefixer().CreatePrefix(l) + format
 	}
 
-	if l.getLogToStderr() {
+	if s.GetLogToStderr() {
 		doWritef(os.Stderr, format, a...)
 	}
 
-	if l.isFileLoggingEnabled() {
-		doWritef(l.getLogWriter(), format, a...)
+	if s.IsFileLoggingEnabled() {
+		doWritef(s.GetLogWriter(), format, a...)
 	}
 }
 
@@ -457,8 +327,4 @@ func resolvePath(path string) (string, error) {
 	}
 
 	return filepath.Clean(path), nil
-}
-
-func validateLogLevel(level Level) bool {
-	return level > 0 && level <= maximumLevel
 }

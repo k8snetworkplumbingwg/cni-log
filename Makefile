@@ -12,7 +12,7 @@ lint: | $(BASE) $(GOLANGCILINT) ; $(info  Running golangci-lint...) @ ## Run gol
 
 .PHONY: test-coverage
 test-coverage: ## Get test coverage
-	go test -count 1 -coverprofile=coverage.out  .
+	go test -count 1 -coverprofile=coverage.out  ./...
 	go tool cover -html=coverage.out
 
 .PHONY: help
