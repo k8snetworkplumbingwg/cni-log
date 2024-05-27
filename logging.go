@@ -21,39 +21,10 @@ import (
 	"path/filepath"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	lumberjack "gopkg.in/natefinch/lumberjack.v2"
-)
-
-// Level type
-type Level int
-
-/*
-Common use of different level:
-
-"panic":   Code crash
-"error":   Unusual event occurred (invalid input or system issue), so exiting code prematurely
-"warning": Unusual event occurred (invalid input or system issue), but continuing
-"info":    Basic information, indication of major code paths
-"debug":   Additional information, indication of minor code branches
-*/
-
-const (
-	InvalidLevel Level = -1
-	PanicLevel   Level = 1
-	ErrorLevel   Level = 2
-	WarningLevel Level = 3
-	InfoLevel    Level = 4
-	DebugLevel   Level = 5
-	maximumLevel Level = DebugLevel
-
-	panicStr   = "panic"
-	errorStr   = "error"
-	warningStr = "warning"
-	infoStr    = "info"
-	debugStr   = "debug"
-	invalidStr = "invalid"
 )
 
 const (
@@ -69,65 +40,7 @@ const (
 	structuredPrefixerOddArguments = "prefixer must return an even number of arguments for structured logging"
 )
 
-var levelMap = map[string]Level{
-	panicStr:   PanicLevel,
-	errorStr:   ErrorLevel,
-	warningStr: WarningLevel,
-	infoStr:    InfoLevel,
-	debugStr:   DebugLevel,
-}
-
-var logger *lumberjack.Logger
-var logWriter io.Writer
-var logLevel Level
-var logToStderr bool
-var prefixer Prefixer
-var structuredPrefixer StructuredPrefixer
-
-// Prefixer creator interface. Implement this interface if you wish to create a custom prefix.
-type Prefixer interface {
-	// Produces the prefix string. CNI-Log will call this function
-	// to request for the prefix when building the logging output and will pass in the appropriate
-	// log level of your log message.
-	CreatePrefix(Level) string
-}
-
-// PrefixerFunc implements the Prefixer interface. It allows passing a function instead of a struct as the prefixer.
-type PrefixerFunc func(Level) string
-
-// Produces the prefix string. CNI-Log will call this function
-// to request for the prefix when building the logging output and will pass in the appropriate
-// log level of your log message.
-func (f PrefixerFunc) CreatePrefix(loggingLevel Level) string {
-	return f(loggingLevel)
-}
-
-// StructuredPrefixer creator interface. Implement this interface if you wish to to create a custom prefix for
-// structured logging.
-type StructuredPrefixer interface {
-	// Produces the prefix string for structured logging. CNI-Log will call this function
-	// to request for the prefix when building the logging output and will pass in the appropriate
-	// log level of your log message.
-	CreateStructuredPrefix(Level, string) []interface{}
-}
-
-// StructuredPrefixerFunc implements the StructuredPrefixer interface. It allows passing a function instead of a struct
-// as the prefixer.
-type StructuredPrefixerFunc func(Level, string) []interface{}
-
-// Produces the prefix string for structured logging. CNI-Log will call this function
-// to request for the prefix when building the logging output and will pass in the appropriate
-// log level of your log message.
-func (f StructuredPrefixerFunc) CreateStructuredPrefix(loggingLevel Level, msg string) []interface{} {
-	return f(loggingLevel, msg)
-}
-
-// Defines a default prefixer which will be used if a custom prefix is not provided. It implements both the Prefixer
-// and the StructuredPrefixer interface.
-type defaultPrefixer struct {
-	prefixFormat string
-	timeFormat   string
-}
+var loggingState state
 
 // LogOptions defines the configuration of the lumberjack logger
 type LogOptions struct {
@@ -142,7 +55,7 @@ func init() {
 }
 
 func initLogger() {
-	logger = &lumberjack.Logger{}
+	loggingState.setLogger(&lumberjack.Logger{})
 
 	// Set default options.
 	SetLogOptions(nil)
@@ -155,28 +68,14 @@ func initLogger() {
 	SetDefaultStructuredPrefixer()
 }
 
-// CreatePrefix implements the Prefixer interface for the defaultPrefixer.
-func (p *defaultPrefixer) CreatePrefix(loggingLevel Level) string {
-	return fmt.Sprintf(p.prefixFormat, time.Now().Format(p.timeFormat), loggingLevel)
-}
-
-// CreateStructuredPrefix implements the StructuredPrefixer interface for the defaultPrefixer.
-func (p *defaultPrefixer) CreateStructuredPrefix(loggingLevel Level, message string) []interface{} {
-	return []interface{}{
-		"time", time.Now().Format(p.timeFormat),
-		"level", loggingLevel,
-		"msg", message,
-	}
-}
-
 // SetPrefixer allows overwriting the Prefixer with a custom one.
 func SetPrefixer(p Prefixer) {
-	prefixer = p
+	loggingState.setPrefixer(p)
 }
 
 // SetStructuredPrefixer allows overwriting the StructuredPrefixer with a custom one.
 func SetStructuredPrefixer(p StructuredPrefixer) {
-	structuredPrefixer = p
+	loggingState.setStructuredPrefixer(p)
 }
 
 // SetDefaultPrefixer sets the default Prefixer.
@@ -198,29 +97,10 @@ func SetDefaultStructuredPrefixer() {
 
 // Set the logging options (LogOptions)
 func SetLogOptions(options *LogOptions) {
-	// give some default value
-	logger.MaxSize = 100
-	logger.MaxAge = 5
-	logger.MaxBackups = 5
-	logger.Compress = true
-	if options != nil {
-		if options.MaxAge != nil {
-			logger.MaxAge = *options.MaxAge
-		}
-		if options.MaxSize != nil {
-			logger.MaxSize = *options.MaxSize
-		}
-		if options.MaxBackups != nil {
-			logger.MaxBackups = *options.MaxBackups
-		}
-		if options.Compress != nil {
-			logger.Compress = *options.Compress
-		}
-	}
-
+	loggingState.setLogOptions(options)
 	// Update the logWriter if necessary.
-	if isFileLoggingEnabled() {
-		logWriter = logger
+	if loggingState.isFileLoggingEnabled() {
+		loggingState.setLoggerAsLogWriter()
 	}
 }
 
@@ -229,10 +109,10 @@ func SetLogFile(filename string) {
 	// Allow logging to stderr only. Print an error a single time when this is set to the empty string but stderr
 	// logging is off.
 	if filename == "" {
-		if !logToStderr {
+		if !loggingState.getLogToStderr() {
 			fmt.Fprint(os.Stderr, logFileReqFailMsg)
 		}
-		disableFileLogging()
+		loggingState.setLogFile("")
 		return
 	}
 
@@ -247,73 +127,34 @@ func SetLogFile(filename string) {
 		return
 	}
 
-	logger.Filename = filename
-	logWriter = logger
-}
-
-// disableFileLogging disables file logging.
-func disableFileLogging() {
-	logger.Filename = ""
-	logWriter = nil
-}
-
-// isFileLoggingEnabled returns true if file logging is enabled.
-func isFileLoggingEnabled() bool {
-	return logWriter != nil
+	loggingState.setLogFile(filename)
 }
 
 // GetLogLevel gets current logging level
 func GetLogLevel() Level {
-	return logLevel
+	return loggingState.getLogLevel()
 }
 
 // SetLogLevel sets logging level
 func SetLogLevel(level Level) {
-	if validateLogLevel(level) {
-		logLevel = level
+	if level.IsValid() {
+		loggingState.setLogLevel(level)
 	} else {
 		fmt.Fprintf(os.Stderr, setLevelFailMsg, level)
 	}
 }
 
-func StringToLevel(level string) Level {
-	if l, found := levelMap[strings.ToLower(level)]; found {
-		return l
-	}
-	return InvalidLevel
-}
-
 // SetLogStderr sets flag for logging stderr output
 func SetLogStderr(enable bool) {
-	if !enable && !isFileLoggingEnabled() {
+	if !enable && !loggingState.isFileLoggingEnabled() {
 		fmt.Fprint(os.Stderr, logFileReqFailMsg)
 	}
-	logToStderr = enable
-}
-
-// String converts a Level into its string representation.
-func (l Level) String() string {
-	switch l {
-	case PanicLevel:
-		return panicStr
-	case WarningLevel:
-		return warningStr
-	case InfoLevel:
-		return infoStr
-	case ErrorLevel:
-		return errorStr
-	case DebugLevel:
-		return debugStr
-	case InvalidLevel:
-		return invalidStr
-	default:
-		return invalidStr
-	}
+	loggingState.setLogToStderr(enable)
 }
 
 // SetOutput set custom output WARNING subsequent call to SetLogFile or SetLogOptions invalidates this setting
 func SetOutput(out io.Writer) {
-	logWriter = out
+	loggingState.setLogWriter(out)
 }
 
 // Panicf prints logging plus stack trace. This should be used only for unrecoverable error
@@ -380,7 +221,7 @@ func DebugStructured(msg string, args ...interface{}) {
 
 // structuredMessage takes msg and an even list of args and returns a structured message.
 func structuredMessage(loggingLevel Level, msg string, args ...interface{}) string {
-	prefixArgs := structuredPrefixer.CreateStructuredPrefix(loggingLevel, msg)
+	prefixArgs := loggingState.getStructuredPrefixer().CreateStructuredPrefix(loggingLevel, msg)
 	if len(prefixArgs)%2 != 0 {
 		panic(fmt.Sprintf("msg=%q logging_failure=%q", msg, structuredPrefixerOddArguments))
 	}
@@ -421,24 +262,24 @@ func printf(level Level, format string, a ...interface{}) {
 // printWithPrefixf prints log messages if they match the configured log level. Messages are optionally prepended by a
 // configured prefix.
 func printWithPrefixf(level Level, printPrefix bool, format string, a ...interface{}) {
-	if level > logLevel {
+	if level > loggingState.getLogLevel() {
 		return
 	}
 
-	if !isFileLoggingEnabled() && !logToStderr {
+	if !loggingState.isFileLoggingEnabled() && !loggingState.getLogToStderr() {
 		return
 	}
 
 	if printPrefix {
-		format = prefixer.CreatePrefix(level) + format
+		format = loggingState.getPrefixer().CreatePrefix(level) + format
 	}
 
-	if logToStderr {
+	if loggingState.getLogToStderr() {
 		doWritef(os.Stderr, format, a...)
 	}
 
-	if isFileLoggingEnabled() {
-		doWritef(logWriter, format, a...)
+	if loggingState.isFileLoggingEnabled() {
+		doWritef(loggingState.getLogWriter(), format, a...)
 	}
 }
 
@@ -492,6 +333,166 @@ func resolvePath(path string) (string, error) {
 	return filepath.Clean(path), nil
 }
 
-func validateLogLevel(level Level) bool {
-	return level > 0 && level <= maximumLevel
+// state is the struct for the loggingState singleton. It allows us to set all logger attributes in a threadsafe manner
+// for as long as we always access all of its attributes via its methods.
+type state struct {
+	loggerMutex        sync.RWMutex
+	logger             *lumberjack.Logger
+	logWriter          io.Writer
+	logLevel           Level
+	logToStderr        bool
+	prefixer           Prefixer
+	structuredPrefixer StructuredPrefixer
+}
+
+// setLogger sets the logger.
+func (s *state) setLogger(logger *lumberjack.Logger) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	s.logger = logger
+}
+
+// getLogger gets the logger.
+func (s *state) getLogger() *lumberjack.Logger {
+	s.loggerMutex.RLock()
+	defer s.loggerMutex.RUnlock()
+
+	return s.logger
+}
+
+// setLogWriter sets the logWriter.
+func (s *state) setLogWriter(logWriter io.Writer) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	s.logWriter = logWriter
+}
+
+// setLoggerAsLogWriter sets the logWriter to a copy of its current logger.
+func (s *state) setLoggerAsLogWriter() {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	cp := *s.logger
+	s.logWriter = &cp
+}
+
+// getLogWriter gets the logWriter.
+func (s *state) getLogWriter() io.Writer {
+	s.loggerMutex.RLock()
+	defer s.loggerMutex.RUnlock()
+
+	return s.logWriter
+}
+
+// setLogLevel sets the logLevel.
+func (s *state) setLogLevel(logLevel Level) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	s.logLevel = logLevel
+}
+
+// getLogLevel gets the logLevel.
+func (s *state) getLogLevel() Level {
+	s.loggerMutex.RLock()
+	defer s.loggerMutex.RUnlock()
+
+	return s.logLevel
+}
+
+// setLogToStderr sets logToStderr.
+func (s *state) setLogToStderr(logToStderr bool) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	s.logToStderr = logToStderr
+}
+
+// getLogToStderr gets getLogToStderr.
+func (s *state) getLogToStderr() bool {
+	s.loggerMutex.RLock()
+	defer s.loggerMutex.RUnlock()
+
+	return s.logToStderr
+}
+
+// setPrefixer sets the prefixer.
+func (s *state) setPrefixer(prefixer Prefixer) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	s.prefixer = prefixer
+}
+
+// getPrefixer gets the prefixer.
+func (s *state) getPrefixer() Prefixer {
+	s.loggerMutex.RLock()
+	defer s.loggerMutex.RUnlock()
+
+	return s.prefixer
+}
+
+// setStructuredPrefixer sets the structuredPrefixer.
+func (s *state) setStructuredPrefixer(structuredPrefixer StructuredPrefixer) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	s.structuredPrefixer = structuredPrefixer
+}
+
+// getStructuredPrefixer gets the structuredPrefixer.
+func (s *state) getStructuredPrefixer() StructuredPrefixer {
+	s.loggerMutex.RLock()
+	defer s.loggerMutex.RUnlock()
+
+	return s.structuredPrefixer
+}
+
+// isFileLoggingEnabled returns true if the logWriter is not nil.
+func (s *state) isFileLoggingEnabled() bool {
+	return s.getLogWriter() != nil
+}
+
+// setLogFile sets the log file. This method sets s.logger.Filename to the specified value and then sets s.logWriter
+// to a copy of s.logger. If filename is the empty string, logWriter is set to nil.
+func (s *state) setLogFile(filename string) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	if filename == "" {
+		s.logger.Filename = ""
+		s.logWriter = nil
+		return
+	}
+	s.logger.Filename = filename
+	cp := *(s.logger)
+	s.logWriter = &cp
+}
+
+// setLogOptions sets the log options.
+func (s *state) setLogOptions(options *LogOptions) {
+	s.loggerMutex.Lock()
+	defer s.loggerMutex.Unlock()
+
+	// give some default value
+	s.logger.MaxSize = 100
+	s.logger.MaxAge = 5
+	s.logger.MaxBackups = 5
+	s.logger.Compress = true
+	if options != nil {
+		if options.MaxAge != nil {
+			s.logger.MaxAge = *options.MaxAge
+		}
+		if options.MaxSize != nil {
+			s.logger.MaxSize = *options.MaxSize
+		}
+		if options.MaxBackups != nil {
+			s.logger.MaxBackups = *options.MaxBackups
+		}
+		if options.Compress != nil {
+			s.logger.Compress = *options.Compress
+		}
+	}
 }
