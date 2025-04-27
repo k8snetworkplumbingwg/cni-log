@@ -1,6 +1,6 @@
 .PHONY: test
 test: ## Run unit tests
-	go test -v .
+	go test -v -race .
 
 GOLANGCILINT = $(GOBIN)/golangci-lint
 $(GOLANGCILINT): | $(BASE) ; $(info  Installing golangci-lint...)
